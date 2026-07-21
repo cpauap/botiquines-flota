@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>Botiquín</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+  body { font-family: sans-serif; max-width: 700px; margin: 40px auto; }
+  table { width: 100%; border-collapse: collapse; margin-top: 15px; }
+  th, td { border: 1px solid #ddd; padding: 6px 8px; text-align: left; font-size: 14px; }
+  th { background: #f0f0f0; }
+  .verde { background: #d4f5d4; }
+  .ambar { background: #fff3cd; }
+  .rojo { background: #f8d7da; }
+  #formAlta { margin-top: 20px; border-top: 1px solid #ccc; padding-top: 15px; }
+  #formAlta input, #formAlta select { margin: 4px; padding: 5px; }
+  #volver { margin-bottom: 15px; }
+</style>
+</head>
+<body>
+  <button id="volver" onclick="window.location.href='panel.html'">← Volver al panel</button>
+  <h2 id="tituloHeli">Cargando...</h2>
+
+  <table>
+    <thead>
+      <tr><th>Producto</th><th>Marca</th><th>Modelo</th><th>Caducidad</th><th>Cantidad</th><th>Estado</th></tr>
+    </thead>
+    <tbody id="filasItems"></tbody>
+  </table>
+
+  <div id="formAlta">
+    <h3>Añadir producto</h3>
+    <input type="text" id="tipo_producto" placeholder="Tipo de producto">
+    <input type="text" id="marca" placeholder="Marca">
+    <input type="text" id="modelo" placeholder="Modelo">
+    <input type="date" id="fecha_caducidad">
+    <input type="number" id="cantidad" placeholder="Cantidad" value="1" min="1">
+    <button onclick="añadirItem()">Guardar</button>
+  </div>
+
+  <script>
+    const SUPABASE_URL = "https://pfyvliaknlpuawuppsko.supabase.co";
+    const SUPABASE_KEY = "sb_publishable_f3F70B-1EnU3aRpQaFu7_A_szShexxl";
+    const client = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+    const params = new URLSearchParams(window.location.search);
+    const helicopteroId = params.get("helicoptero");
+    let botiquinId = null;
+
+    function claseSemaforo(fecha) {
+      const hoy = new Date();
+      const cad = new Date(fecha);
+      const dias = Math.floor((cad - hoy) / (1000 * 60 * 60 * 24));
+      if (dias < 0) return "rojo";
+      if (dias <= 45) return dias <= 15 ? "rojo" : "ambar";
+      return "verde";
+    }
+
+    async function obtenerOCrearBotiquin() {
+      let { data } = await client
+        .from("botiquines")
+        .select("id")
+        .eq("helicoptero_id", helicopteroId)
+        .maybeSingle();
+
+      if (!data) {
+        const { data: nuevo } = await client
+          .from("botiquines")
+          .insert({ helicoptero_id: helicopteroId })
+          .select("id")
+          .single();
+        data = nuevo;
+      }
+      return data.id;
+    }
+
+    async function cargarItems() {
+      const { data: heli } = await client
+        .from("helicopteros")
+        .select("nombre")
+        .eq("id", helicopteroId)
+        .single();
+      document.getElementById("tituloHeli").innerText = "Botiquín - " + heli.nombre;
+
+      botiquinId = await obtenerOCrearBotiquin();
+
+      const { data: items } = await client
+        .from("items")
+        .select("*")
+        .eq("botiquin_id", botiquinId)
+        .eq("estado", "activo")
+        .order("fecha_caducidad");
+
+      const filas = document.getElementById("filasItems");
+      filas.innerHTML = "";
+      items.forEach(item => {
+        const tr = document.createElement("tr");
+        tr.className = claseSemaforo(item.fecha_caducidad);
+        tr.innerHTML = `
+          <td>${item.tipo_producto}</td>
+          <td>${item.marca}</td>
+          <td>${item.modelo || ""}</td>
+          <td>${item.fecha_caducidad}</td>
+          <td>${item.cantidad}</td>
+          <td>${item.estado}</td>`;
+        filas.appendChild(tr);
+      });
+    }
+
+    async function añadirItem() {
+      const tipo_producto = document.getElementById("tipo_producto").value;
+      const marca = document.getElementById("marca").value;
+      const modelo = document.getElementById("modelo").value;
+      const fecha_caducidad = document.getElementById("fecha_caducidad").value;
+      const cantidad = document.getElementById("cantidad").value;
+
+      if (!tipo_producto || !marca || !fecha_caducidad) {
+        alert("Rellena al menos tipo de producto, marca y fecha de caducidad.");
+        return;
+      }
+
+      await client.from("items").insert({
+        botiquin_id: botiquinId,
+        tipo_producto,
+        marca,
+        modelo,
+        fecha_caducidad,
+        cantidad
+      });
+
+      document.getElementById("tipo_producto").value = "";
+      document.getElementById("marca").value = "";
+      document.getElementById("modelo").value = "";
+      document.getElementById("fecha_caducidad").value = "";
+      document.getElementById("cantidad").value = "1";
+
+      cargarItems();
+    }
+
+    cargarItems();
+  </script>
+</body>
+</html>
