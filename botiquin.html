@@ -20,6 +20,13 @@
 <body>
   <button id="volver" onclick="window.location.href='panel.html'">← Volver al panel</button>
   <h2 id="tituloHeli">Cargando...</h2>
+  <div>
+    Estado del helicóptero:
+    <select id="estadoHeli" onchange="cambiarEstadoHeli()">
+      <option value="en servicio">En servicio</option>
+      <option value="fuera de servicio">Fuera de servicio</option>
+    </select>
+  </div>
 
   <table>
     <thead>
@@ -79,10 +86,11 @@
     async function cargarItems() {
       const { data: heli } = await client
         .from("helicopteros")
-        .select("nombre")
+        .select("nombre, estado")
         .eq("id", helicopteroId)
         .single();
       document.getElementById("tituloHeli").innerText = "Botiquín - " + heli.nombre;
+      document.getElementById("estadoHeli").value = heli.estado;
 
       botiquinId = await obtenerOCrearBotiquin();
 
@@ -108,6 +116,13 @@
           <td><button onclick="prepararReemplazo('${item.id}')">Reemplazar</button></td>`;
         filas.appendChild(tr);
       });
+    }
+
+    async function cambiarEstadoHeli() {
+      const nuevoEstado = document.getElementById("estadoHeli").value;
+      await client.from("helicopteros")
+        .update({ estado: nuevoEstado })
+        .eq("id", helicopteroId);
     }
 
     function prepararReemplazo(itemId) {
