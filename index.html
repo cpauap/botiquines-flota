@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>Botiquines Flota - Acceso</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+  body { font-family: sans-serif; max-width: 400px; margin: 80px auto; }
+  input { display: block; width: 100%; margin-bottom: 10px; padding: 8px; }
+  button { padding: 8px 16px; }
+  #mensaje { color: red; margin-top: 10px; }
+</style>
+</head>
+<body>
+  <h2>Acceso - Botiquines Flota</h2>
+  <input type="email" id="email" placeholder="Correo">
+  <input type="password" id="password" placeholder="Contraseña">
+  <button onclick="iniciarSesion()">Entrar</button>
+  <p id="mensaje"></p>
+
+  <script>
+    const SUPABASE_URL = "https://pfyvliaknlpuawuppsko.supabase.co";
+    const SUPABASE_KEY = "sb_publishable_f3F70B-1EnU3aRpQaFu7_A_szShexxl";
+    const client = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+    async function iniciarSesion() {
+      const email = document.getElementById("email").value;
+      const password = document.getElementById("password").value;
+      const { data, error } = await client.auth.signInWithPassword({ email, password });
+      if (error) {
+        document.getElementById("mensaje").innerText = "Error: " + error.message;
+      } else {
+        window.location.href = "panel.html";
+      }
+    }
+  </script>
+</body>
+</html>
