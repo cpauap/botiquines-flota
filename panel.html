@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>Botiquines Flota - Panel</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+  body { font-family: sans-serif; max-width: 700px; margin: 40px auto; }
+  .base-grupo { margin-bottom: 20px; }
+  .base-titulo { background: #eee; padding: 6px 10px; font-weight: bold; }
+  .helicoptero { padding: 8px 10px; border-bottom: 1px solid #ddd; display: flex; justify-content: space-between; }
+  .en-servicio { color: green; }
+  .fuera-servicio { color: red; }
+  #logout { float: right; }
+</style>
+</head>
+<body>
+  <button id="logout" onclick="cerrarSesion()">Cerrar sesión</button>
+  <h2>Flota - Botiquines</h2>
+  <div id="contenido">Cargando...</div>
+
+  <script>
+    const SUPABASE_URL = "https://pfyvliaknlpuawuppsko.supabase.co";
+    const SUPABASE_KEY = "sb_publishable_f3F70B-1EnU3aRpQaFu7_A_szShexxl";
+    const client = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+    async function comprobarSesion() {
+      const { data } = await client.auth.getSession();
+      if (!data.session) {
+        window.location.href = "index.html";
+      }
+    }
+
+    async function cerrarSesion() {
+      await client.auth.signOut();
+      window.location.href = "index.html";
+    }
+
+    async function cargarPanel() {
+      await comprobarSesion();
+
+      const { data: bases } = await client
+        .from("bases")
+        .select("id, nombre")
+        .order("nombre");
+
+      const { data: helicopteros } = await client
+        .from("helicopteros")
+        .select("id, nombre, estado, base_id");
+
+      const contenedor = document.getElementById("contenido");
+      contenedor.innerHTML = "";
+
+      bases.forEach(base => {
+        const helisDeEstaBase = helicopteros.filter(h => h.base_id === base.id);
+        if (helisDeEstaBase.length === 0) return;
+
+        const grupo = document.createElement("div");
+        grupo.className = "base-grupo";
+
+        const titulo = document.createElement("div");
+        titulo.className = "base-titulo";
+        titulo.innerText = base.nombre;
+        grupo.appendChild(titulo);
+
+        helisDeEstaBase.forEach(h => {
+          const fila = document.createElement("div");
+          fila.className = "helicoptero";
+          const estadoClase = h.estado === "en servicio" ? "en-servicio" : "fuera-servicio";
+          fila.innerHTML = `<span>${h.nombre}</span><span class="${estadoClase}">${h.estado}</span>`;
+          fila.style.cursor = "pointer";
+          fila.onclick = () => window.location.href = `botiquin.html?helicoptero=${h.id}`;
+          grupo.appendChild(fila);
+        });
+
+        contenedor.appendChild(grupo);
+      });
+    }
+
+    cargarPanel();
+  </script>
+</body>
+</html>
