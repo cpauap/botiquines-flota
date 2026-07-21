@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>Histórico del botiquín</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+  body { font-family: sans-serif; max-width: 750px; margin: 40px auto; }
+  table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+  th, td { border: 1px solid #ddd; padding: 6px 8px; text-align: left; font-size: 14px; }
+  th { background: #f0f0f0; }
+  section { margin-bottom: 35px; }
+  #consultaFecha { margin-top: 10px; }
+</style>
+</head>
+<body>
+  <button onclick="volver()">← Volver al botiquín</button>
+  <h2 id="titulo">Cargando...</h2>
+
+  <section>
+    <h3>Productos reemplazados</h3>
+    <table>
+      <thead><tr><th>Producto</th><th>Marca</th><th>Modelo</th><th>Caducidad</th><th>Nota</th></tr></thead>
+      <tbody id="filasReemplazados"></tbody>
+    </table>
+  </section>
+
+  <section>
+    <h3>Consultar estado en una fecha concreta</h3>
+    <input type="date" id="fechaConsulta">
+    <button onclick="consultarFecha()">Consultar</button>
+    <table id="consultaFecha">
+      <thead><tr><th>Producto</th><th>Marca</th><th>Modelo</th><th>Caducidad</th><th>Cantidad</th><th>Estado en esa fecha</th></tr></thead>
+      <tbody id="filasConsulta"></tbody>
+    </table>
+  </section>
+
+  <script>
+    const SUPABASE_URL = "https://pfyvliaknlpuawuppsko.supabase.co";
+    const SUPABASE_KEY = "sb_publishable_f3F70B-1EnU3aRpQaFu7_A_szShexxl";
+    const client = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+    const params = new URLSearchParams(window.location.search);
+    const helicopteroId = params.get("helicoptero");
+    let botiquinId = null;
+
+    function volver() {
+      window.location.href = "botiquin.html?helicoptero=" + helicopteroId;
+    }
+
+    async function cargarCabecera() {
+      const { data: heli } = await client
+        .from("helicopteros")
+        .select("nombre")
+        .eq("id", helicopteroId)
+        .single();
+      document.getElementById("titulo").innerText = "Histórico - " + heli.nombre;
+
+      const { data: bot } = await client
+        .from("botiquines")
+        .select("id")
+        .eq("helicoptero_id", helicopteroId)
+        .single();
+      botiquinId = bot.id;
+
+      cargarReemplazados();
+    }
+
+    async function cargarReemplazados() {
+      const { data: items } = await client
+        .from("items")
+        .select("*")
+        .eq("botiquin_id", botiquinId)
+        .eq("estado", "reemplazado")
+        .order("fecha_caducidad", { ascending: false });
+
+      const filas = document.getElementById("filasReemplazados");
+      filas.innerHTML = "";
+      items.forEach(item => {
+        const tr = document.createElement("tr");
+        tr.innerHTML = `<td>${item.tipo_producto}</td><td>${item.marca}</td><td>${item.modelo || ""}</td><td>${item.fecha_caducidad}</td><td>${item.nota || ""}</td>`;
+        filas.appendChild(tr);
+      });
+    }
+
+    async function consultarFecha() {
+      const fecha = document.getElementById("fechaConsulta").value;
+      if (!fecha) { alert("Elige una fecha."); return; }
+      const fechaLimite = fecha + "T23:59:59";
+
+      const { data: logs } = await client
+        .from("audit_log")
+        .select("*")
+        .eq("tabla", "items")
+        .lte("creado_en", fechaLimite)
+        .order("creado_en", { ascending: true });
+
+      const relevantes = logs.filter(l => {
+        const nuevo = l.datos_nuevos;
+        const anterior = l.datos_anteriores;
+        return (nuevo && nuevo.botiquin_id === botiquinId) || (anterior && anterior.botiquin_id === botiquinId);
+      });
+
+      const ultimoPorItem = {};
+      relevantes.forEach(l => { ultimoPorItem[l.registro_id] = l; });
+
+      const filas = document.getElementById("filasConsulta");
+      filas.innerHTML = "";
+      Object.values(ultimoPorItem).forEach(l => {
+        const item = l.datos_nuevos;
+        if (!item) return;
+        const tr = document.createElement("tr");
+        tr.innerHTML = `<td>${item.tipo_producto}</td><td>${item.marca}</td><td>${item.modelo || ""}</td><td>${item.fecha_caducidad}</td><td>${item.cantidad}</td><td>${item.estado}</td>`;
+        filas.appendChild(tr);
+      });
+
+      if (Object.keys(ultimoPorItem).length === 0) {
+        filas.innerHTML = "<tr><td colspan='6'>No hay datos registrados hasta esa fecha.</td></tr>";
+      }
+    }
+
+    cargarCabecera();
+  </script>
+</body>
+</html>
