@@ -23,7 +23,7 @@
 
   <table>
     <thead>
-      <tr><th>Producto</th><th>Marca</th><th>Modelo</th><th>Caducidad</th><th>Cantidad</th><th>Estado</th></tr>
+      <tr><th>Producto</th><th>Marca</th><th>Modelo</th><th>Caducidad</th><th>Cantidad</th><th>Estado</th><th>Acción</th></tr>
     </thead>
     <tbody id="filasItems"></tbody>
   </table>
@@ -35,7 +35,8 @@
     <input type="text" id="modelo" placeholder="Modelo">
     <input type="date" id="fecha_caducidad">
     <input type="number" id="cantidad" placeholder="Cantidad" value="1" min="1">
-    <button onclick="añadirItem()">Guardar</button>
+    <input type="text" id="nota" placeholder="Nota (motivo del reemplazo, opcional)" style="width: 250px;">
+    <button id="btnGuardar" onclick="añadirItem()">Guardar</button>
   </div>
 
   <script>
@@ -46,6 +47,7 @@
     const params = new URLSearchParams(window.location.search);
     const helicopteroId = params.get("helicoptero");
     let botiquinId = null;
+    let reemplazandoId = null;
 
     function claseSemaforo(fecha) {
       const hoy = new Date();
@@ -102,9 +104,16 @@
           <td>${item.modelo || ""}</td>
           <td>${item.fecha_caducidad}</td>
           <td>${item.cantidad}</td>
-          <td>${item.estado}</td>`;
+          <td>${item.estado}</td>
+          <td><button onclick="prepararReemplazo('${item.id}')">Reemplazar</button></td>`;
         filas.appendChild(tr);
       });
+    }
+
+    function prepararReemplazo(itemId) {
+      reemplazandoId = itemId;
+      document.getElementById("btnGuardar").innerText = "Guardar reemplazo";
+      document.getElementById("formAlta").scrollIntoView({ behavior: "smooth" });
     }
 
     async function añadirItem() {
@@ -113,10 +122,17 @@
       const modelo = document.getElementById("modelo").value;
       const fecha_caducidad = document.getElementById("fecha_caducidad").value;
       const cantidad = document.getElementById("cantidad").value;
+      const nota = document.getElementById("nota").value;
 
       if (!tipo_producto || !marca || !fecha_caducidad) {
         alert("Rellena al menos tipo de producto, marca y fecha de caducidad.");
         return;
+      }
+
+      if (reemplazandoId) {
+        await client.from("items")
+          .update({ estado: "reemplazado", nota: nota || "Reemplazado" })
+          .eq("id", reemplazandoId);
       }
 
       await client.from("items").insert({
@@ -128,11 +144,14 @@
         cantidad
       });
 
+      reemplazandoId = null;
+      document.getElementById("btnGuardar").innerText = "Guardar";
       document.getElementById("tipo_producto").value = "";
       document.getElementById("marca").value = "";
       document.getElementById("modelo").value = "";
       document.getElementById("fecha_caducidad").value = "";
       document.getElementById("cantidad").value = "1";
+      document.getElementById("nota").value = "";
 
       cargarItems();
     }
