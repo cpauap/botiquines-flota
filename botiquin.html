@@ -19,6 +19,7 @@
 </head>
 <body>
   <button id="volver" onclick="window.location.href='panel.html'">← Volver al panel</button>
+  <button onclick="verHistorico()">Ver histórico</button>
   <h2 id="tituloHeli">Cargando...</h2>
   <div>
     Estado del helicóptero:
@@ -116,6 +117,10 @@
           <td><button onclick="prepararReemplazo('${item.id}')">Reemplazar</button></td>`;
         filas.appendChild(tr);
       });
+    }
+
+    function verHistorico() {
+      window.location.href = "historico.html?helicoptero=" + helicopteroId;
     }
 
     async function cambiarEstadoHeli() {
