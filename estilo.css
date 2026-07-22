@@ -1,0 +1,155 @@
+:root {
+  --azul-marino: #0B2E4F;
+  --azul-acero: #14507A;
+  --azul-cielo: #4A90C4;
+  --azul-palido: #EAF2F8;
+  --blanco: #FFFFFF;
+  --texto: #1A2733;
+  --gris-borde: #CBD9E3;
+  --verde: #2E7D46;
+  --ambar: #B8860B;
+  --rojo: #B33A3A;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  font-family: "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  background-color: var(--azul-palido);
+  color: var(--texto);
+  margin: 0;
+  min-height: 100vh;
+  position: relative;
+}
+
+body::before {
+  content: "";
+  position: fixed;
+  right: -60px;
+  bottom: -40px;
+  width: 520px;
+  height: 300px;
+  background-image: url("helicoptero-silueta.svg");
+  background-repeat: no-repeat;
+  background-size: contain;
+  opacity: 0.06;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.contenedor {
+  position: relative;
+  z-index: 1;
+  max-width: 720px;
+  margin: 0 auto;
+  padding: 24px;
+}
+
+.barra-superior {
+  background-color: var(--azul-marino);
+  color: var(--blanco);
+  padding: 16px 24px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  position: relative;
+  z-index: 1;
+}
+
+.barra-superior h1 {
+  font-size: 18px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  margin: 0;
+  font-weight: 600;
+}
+
+h2 {
+  color: var(--azul-marino);
+  border-bottom: none;
+  position: relative;
+  padding-bottom: 10px;
+  margin-top: 0;
+}
+
+h2::after {
+  content: "";
+  display: block;
+  width: 90px;
+  height: 3px;
+  margin-top: 8px;
+  background: linear-gradient(90deg, var(--azul-marino) 0%, var(--azul-cielo) 60%, transparent 100%);
+  border-radius: 2px;
+}
+
+h3 { color: var(--azul-acero); }
+
+.tarjeta {
+  background: var(--blanco);
+  border: 1px solid var(--gris-borde);
+  border-radius: 8px;
+  padding: 16px 20px;
+  margin-bottom: 16px;
+}
+
+button, .boton {
+  background-color: var(--azul-acero);
+  color: var(--blanco);
+  border: none;
+  border-radius: 6px;
+  padding: 9px 16px;
+  font-size: 14px;
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+}
+
+button:hover, .boton:hover {
+  background-color: var(--azul-marino);
+}
+
+button:focus-visible, input:focus-visible, select:focus-visible {
+  outline: 2px solid var(--azul-cielo);
+  outline-offset: 2px;
+}
+
+input, select {
+  border: 1px solid var(--gris-borde);
+  border-radius: 5px;
+  padding: 8px;
+  font-family: inherit;
+  font-size: 14px;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  background: var(--blanco);
+}
+
+th {
+  background-color: var(--azul-marino);
+  color: var(--blanco);
+  text-align: left;
+  padding: 8px 10px;
+  font-weight: 600;
+  font-size: 13px;
+}
+
+td {
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--gris-borde);
+  font-size: 14px;
+}
+
+.verde { background-color: #E3F3E7 !important; }
+.ambar { background-color: #FBF0D9 !important; }
+.rojo { background-color: #F8E2E2 !important; }
+
+.en-servicio { color: var(--verde); font-weight: 600; }
+.fuera-servicio { color: var(--rojo); font-weight: 600; }
+
+a { color: var(--azul-acero); }
+
+@media (prefers-reduced-motion: reduce) {
+  button, .boton { transition: none; }
+}
