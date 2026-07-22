@@ -79,7 +79,7 @@
       const { Document, Packer, Table, TableRow, TableCell, Paragraph, TextRun,
               WidthType, ShadingType, AlignmentType, HeadingLevel, VerticalAlign } = docx;
 
-      const anchoCol = [4500, 3000, 1526];
+      const anchoCol = [5426, 3600, 1500];
 
       function celda(texto, ancho, opciones = {}) {
         return new TableCell({
@@ -153,11 +153,18 @@
       const tabla = new Table({
         width: { size: anchoCol[0] + anchoCol[1] + anchoCol[2], type: WidthType.DXA },
         columnWidths: anchoCol,
+        margins: { top: 100, bottom: 100, left: 120, right: 120 },
         rows: filas
       });
 
       const doc = new Document({
         sections: [{
+          properties: {
+            page: {
+              margin: { top: 720, bottom: 720, left: 720, right: 720 },
+              size: { width: 11906, height: 16838 }
+            }
+          },
           children: [
             tabla,
             new Paragraph({ text: "" }),
