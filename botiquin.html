@@ -45,16 +45,17 @@
 
   <table>
     <thead>
-      <tr><th>Producto</th><th>Marca</th><th>Modelo</th><th>Caducidad</th><th>Cantidad</th><th>Estado</th><th>Acción</th></tr>
+      <tr><th>Categoría</th><th>Marca</th><th>Modelo</th><th>Caducidad / Cantidad</th><th>Estado</th><th>Acción</th></tr>
     </thead>
     <tbody id="filasItems"></tbody>
   </table>
 
   <div id="formAlta">
     <h3>Añadir producto</h3>
-    <input type="text" id="tipo_producto" placeholder="Tipo de producto">
+    <select id="categoria_id"></select>
     <input type="text" id="marca" placeholder="Marca">
     <input type="text" id="modelo" placeholder="Modelo">
+    <label><input type="checkbox" id="caduca" checked onchange="toggleCaduca()"> Caduca</label>
     <input type="date" id="fecha_caducidad">
     <input type="number" id="cantidad" placeholder="Cantidad" value="1" min="1">
     <input type="text" id="nota" placeholder="Nota (motivo del reemplazo, opcional)" style="width: 250px;">
@@ -71,13 +72,35 @@
     let botiquinId = null;
     let reemplazandoId = null;
 
-    function claseSemaforo(fecha) {
+    function claseSemaforo(item) {
+      if (!item.caduca || !item.fecha_caducidad) return "";
       const hoy = new Date();
-      const cad = new Date(fecha);
+      const cad = new Date(item.fecha_caducidad);
       const dias = Math.floor((cad - hoy) / (1000 * 60 * 60 * 24));
       if (dias < 0) return "rojo";
       if (dias <= 45) return dias <= 15 ? "rojo" : "ambar";
       return "verde";
+    }
+
+    function toggleCaduca() {
+      const marcado = document.getElementById("caduca").checked;
+      document.getElementById("fecha_caducidad").style.display = marcado ? "inline" : "none";
+    }
+
+    async function cargarCategorias() {
+      const { data: categorias } = await client
+        .from("categorias_producto")
+        .select("id, nombre")
+        .order("orden");
+
+      const select = document.getElementById("categoria_id");
+      select.innerHTML = "";
+      categorias.forEach(c => {
+        const opt = document.createElement("option");
+        opt.value = c.id;
+        opt.innerText = c.nombre;
+        select.appendChild(opt);
+      });
     }
 
     async function obtenerOCrearBotiquin() {
@@ -115,7 +138,7 @@
 
       const { data: items } = await client
         .from("items")
-        .select("*")
+        .select("*, categorias_producto(nombre)")
         .eq("botiquin_id", botiquinId)
         .eq("estado", "activo")
         .order("fecha_caducidad");
@@ -124,13 +147,13 @@
       filas.innerHTML = "";
       items.forEach(item => {
         const tr = document.createElement("tr");
-        tr.className = claseSemaforo(item.fecha_caducidad);
+        tr.className = claseSemaforo(item);
+        const valorCol = item.caduca ? (item.fecha_caducidad || "") : (item.cantidad + " u");
         tr.innerHTML = `
-          <td>${item.tipo_producto}</td>
+          <td>${item.categorias_producto?.nombre || ""}</td>
           <td>${item.marca}</td>
           <td>${item.modelo || ""}</td>
-          <td>${item.fecha_caducidad}</td>
-          <td>${item.cantidad}</td>
+          <td>${valorCol}</td>
           <td>${item.estado}</td>
           <td><button onclick="prepararReemplazo('${item.id}')">Reemplazar</button></td>`;
         filas.appendChild(tr);
@@ -225,15 +248,16 @@
     }
 
     async function añadirItem() {
-      const tipo_producto = document.getElementById("tipo_producto").value;
+      const categoria_id = document.getElementById("categoria_id").value;
       const marca = document.getElementById("marca").value;
       const modelo = document.getElementById("modelo").value;
+      const caduca = document.getElementById("caduca").checked;
       const fecha_caducidad = document.getElementById("fecha_caducidad").value;
       const cantidad = document.getElementById("cantidad").value;
       const nota = document.getElementById("nota").value;
 
-      if (!tipo_producto || !marca || !fecha_caducidad) {
-        alert("Rellena al menos tipo de producto, marca y fecha de caducidad.");
+      if (!categoria_id || !marca || (caduca && !fecha_caducidad)) {
+        alert("Rellena al menos categoría, marca, y la fecha de caducidad si el producto caduca.");
         return;
       }
 
@@ -245,18 +269,20 @@
 
       await client.from("items").insert({
         botiquin_id: botiquinId,
-        tipo_producto,
+        categoria_id,
         marca,
         modelo,
-        fecha_caducidad,
+        caduca,
+        fecha_caducidad: caduca ? fecha_caducidad : null,
         cantidad
       });
 
       reemplazandoId = null;
       document.getElementById("btnGuardar").innerText = "Guardar";
-      document.getElementById("tipo_producto").value = "";
       document.getElementById("marca").value = "";
       document.getElementById("modelo").value = "";
+      document.getElementById("caduca").checked = true;
+      toggleCaduca();
       document.getElementById("fecha_caducidad").value = "";
       document.getElementById("cantidad").value = "1";
       document.getElementById("nota").value = "";
@@ -266,6 +292,7 @@
 
     cargarItems();
     cargarDocumentos();
+    cargarCategorias();
   </script>
 </body>
 </html>
