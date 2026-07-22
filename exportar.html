@@ -5,6 +5,8 @@
 <title>Exportar botiquín</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="docx.umd.js"></script>
+<script src="pdfmake.min.js"></script>
+<script src="vfs_fonts.js"></script>
 <style>
   body { font-family: sans-serif; max-width: 500px; margin: 60px auto; }
   label { display: block; margin-top: 15px; }
@@ -20,6 +22,7 @@
   </label>
 
   <button onclick="generarWord()">Descargar Word (.docx)</button>
+  <button onclick="generarPDF()">Descargar PDF</button>
   <p id="estado"></p>
 
   <script>
@@ -186,6 +189,71 @@
       a.href = url;
       a.download = `Botiquin_${nombreHeli}.docx`;
       a.click();
+      document.getElementById("estado").innerText = "Descargado.";
+    }
+
+    async function generarPDF() {
+      document.getElementById("estado").innerText = "Generando...";
+      const { nombreHeli, categorias, items } = await obtenerDatos();
+      const fechaEmision = document.getElementById("fechaEmision").value;
+      if (!fechaEmision) { alert("Elige una fecha de emisión."); return; }
+
+      const cuerpo = [];
+
+      cuerpo.push([
+        { text: "BOTIQUÍN DE PRIMEROS AUXILIOS", colSpan: 2, bold: true, fillColor: "#D9D9D9" }, {},
+        { text: nombreHeli, bold: true, alignment: "center", fillColor: "#D9D9D9" }
+      ]);
+
+      cuerpo.push([
+        { text: "CONTENIDO BÁSICO", colSpan: 3, bold: true, alignment: "center", fillColor: "#EDEDED" }, {}, {}
+      ]);
+
+      cuerpo.push([
+        { text: "Lista del contenido", bold: true },
+        { text: "" },
+        { text: "X", alignment: "center" }
+      ]);
+
+      categorias.forEach(cat => {
+        const itemsCategoria = items.filter(i => i.categoria_id === cat.id);
+        const n = Math.max(1, itemsCategoria.length);
+
+        for (let i = 0; i < n; i++) {
+          const item = itemsCategoria[i];
+          const fila = [];
+
+          fila.push(i === 0 ? { text: cat.nombre, bold: true, rowSpan: n } : {});
+
+          if (item) {
+            const producto = [item.marca, item.modelo].filter(Boolean).join(" ");
+            const valorCol3 = item.caduca ? (item.fecha_caducidad || "") : (item.cantidad + " u");
+            fila.push({ text: producto });
+            fila.push({ text: valorCol3, alignment: "center" });
+          } else {
+            fila.push({ text: "" });
+            fila.push({ text: "" });
+          }
+
+          cuerpo.push(fila);
+        }
+      });
+
+      const docDefinition = {
+        pageMargins: [30, 30, 30, 30],
+        content: [
+          {
+            table: { widths: [230, 200, 85], body: cuerpo },
+            layout: { paddingTop: () => 3, paddingBottom: () => 3, paddingLeft: () => 4, paddingRight: () => 4 }
+          },
+          { text: "", margin: [0, 15, 0, 0] },
+          { text: `Madrid-Cuatro Vientos, a ${formatearFechaLarga(fechaEmision)}`, alignment: "center" },
+          { text: "EL RESPONSABLE G. M. AERONAVEGABILIDAD ESMG 195", alignment: "center", bold: true }
+        ],
+        defaultStyle: { fontSize: 9 }
+      };
+
+      pdfMake.createPdf(docDefinition).download(`Botiquin_${nombreHeli}.pdf`);
       document.getElementById("estado").innerText = "Descargado.";
     }
   </script>
