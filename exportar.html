@@ -3,20 +3,22 @@
 <head>
 <meta charset="UTF-8">
 <title>Exportar botiquín</title>
+<link rel="stylesheet" href="estilo.css">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="docx.umd.js"></script>
 <script src="pdfmake.min.js"></script>
 <script src="vfs_fonts.js"></script>
 <style>
-  body { font-family: sans-serif; max-width: 500px; margin: 60px auto; }
   label { display: block; margin-top: 15px; }
-  input, button { padding: 8px; margin-top: 6px; }
 </style>
 </head>
 <body>
-  <button onclick="volver()">← Volver al botiquín</button>
-  <h2>Exportar documento oficial</h2>
-
+  <div class="barra-superior">
+    <h1>Exportar documento</h1>
+    <button onclick="volver()">← Volver</button>
+  </div>
+  <div class="contenedor">
+  <div class="tarjeta" style="max-width: 420px;">
   <label>Fecha de emisión:
     <input type="date" id="fechaEmision">
   </label>
@@ -24,6 +26,8 @@
   <button onclick="generarWord()">Descargar Word (.docx)</button>
   <button onclick="generarPDF()">Descargar PDF</button>
   <p id="estado"></p>
+  </div>
+  </div>
 
   <script>
     const SUPABASE_URL = "https://pfyvliaknlpuawuppsko.supabase.co";
