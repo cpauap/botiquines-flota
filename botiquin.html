@@ -3,32 +3,31 @@
 <head>
 <meta charset="UTF-8">
 <title>Botiquín</title>
+<link rel="stylesheet" href="estilo.css">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
-  body { font-family: sans-serif; max-width: 700px; margin: 40px auto; }
-  table { width: 100%; border-collapse: collapse; margin-top: 15px; }
-  th, td { border: 1px solid #ddd; padding: 6px 8px; text-align: left; font-size: 14px; }
-  th { background: #f0f0f0; }
-  .verde { background: #d4f5d4; }
-  .ambar { background: #fff3cd; }
-  .rojo { background: #f8d7da; }
-  #formAlta { margin-top: 20px; border-top: 1px solid #ccc; padding-top: 15px; }
-  #formAlta input, #formAlta select { margin: 4px; padding: 5px; }
-  #volver { margin-bottom: 15px; }
+  table { margin-top: 15px; }
+  #formAlta { margin-top: 20px; border-top: 1px solid var(--gris-borde); padding-top: 15px; }
+  #formAlta input, #formAlta select { margin: 4px; }
 </style>
 </head>
 <body>
-  <button id="volver" onclick="window.location.href='panel.html'">← Volver al panel</button>
-  <button onclick="verHistorico()">Ver histórico</button>
-  <button onclick="window.location.href='exportar.html?helicoptero='+helicopteroId">Exportar documento</button>
-  <h2 id="tituloHeli">Cargando...</h2>
-  <div id="fotoSeccion" style="margin: 15px 0;">
+  <div class="barra-superior">
+    <h1 id="tituloHeli">Cargando...</h1>
+    <div>
+      <button onclick="window.location.href='panel.html'">← Panel</button>
+      <button onclick="verHistorico()">Histórico</button>
+      <button onclick="window.location.href='exportar.html?helicoptero='+helicopteroId">Exportar</button>
+    </div>
+  </div>
+  <div class="contenedor">
+  <div id="fotoSeccion" class="tarjeta">
     <img id="fotoActual" style="max-width: 200px; display: none; border-radius: 6px;">
     <br>
     <input type="file" id="inputFoto" accept="image/*">
     <button onclick="subirFoto()">Guardar foto de portada</button>
   </div>
-  <div>
+  <div class="tarjeta">
     Estado del helicóptero:
     <select id="estadoHeli" onchange="cambiarEstadoHeli()">
       <option value="en servicio">En servicio</option>
@@ -36,7 +35,7 @@
     </select>
   </div>
 
-  <div id="documentosSeccion" style="margin: 20px 0; border-top: 1px solid #ccc; padding-top: 15px;">
+  <div id="documentosSeccion" class="tarjeta">
     <h3>Documentos (actas, etc.)</h3>
     <ul id="listaDocumentos"></ul>
     <input type="text" id="nombreDocumento" placeholder="Nombre del documento">
@@ -44,6 +43,7 @@
     <button onclick="subirDocumento()">Subir documento</button>
   </div>
 
+  <div class="tarjeta">
   <table>
     <thead>
       <tr><th>Categoría</th><th>Marca</th><th>Modelo</th><th>Caducidad / Cantidad</th><th>Estado</th><th>Acción</th></tr>
@@ -61,6 +61,8 @@
     <input type="number" id="cantidad" placeholder="Cantidad" value="1" min="1">
     <input type="text" id="nota" placeholder="Nota (motivo del reemplazo, opcional)" style="width: 250px;">
     <button id="btnGuardar" onclick="añadirItem()">Guardar</button>
+  </div>
+  </div>
   </div>
 
   <script>
