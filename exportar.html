@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>Exportar botiquín</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://unpkg.com/docx@8.5.0/build/index.js"></script>
+<style>
+  body { font-family: sans-serif; max-width: 500px; margin: 60px auto; }
+  label { display: block; margin-top: 15px; }
+  input, button { padding: 8px; margin-top: 6px; }
+</style>
+</head>
+<body>
+  <button onclick="volver()">← Volver al botiquín</button>
+  <h2>Exportar documento oficial</h2>
+
+  <label>Fecha de emisión:
+    <input type="date" id="fechaEmision">
+  </label>
+
+  <button onclick="generarWord()">Descargar Word (.docx)</button>
+  <p id="estado"></p>
+
+  <script>
+    const SUPABASE_URL = "https://pfyvliaknlpuawuppsko.supabase.co";
+    const SUPABASE_KEY = "sb_publishable_f3F70B-1EnU3aRpQaFu7_A_szShexxl";
+    const client = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+    const params = new URLSearchParams(window.location.search);
+    const helicopteroId = params.get("helicoptero");
+
+    const MESES = ["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"];
+
+    document.getElementById("fechaEmision").value = new Date().toISOString().split("T")[0];
+
+    function volver() {
+      window.location.href = "botiquin.html?helicoptero=" + helicopteroId;
+    }
+
+    function formatearFechaLarga(fechaISO) {
+      const [anio, mes, dia] = fechaISO.split("-");
+      return `${parseInt(dia)} de ${MESES[parseInt(mes) - 1]} ${anio}`;
+    }
+
+    async function obtenerDatos() {
+      const { data: heli } = await client
+        .from("helicopteros")
+        .select("nombre")
+        .eq("id", helicopteroId)
+        .single();
+
+      const { data: bot } = await client
+        .from("botiquines")
+        .select("id")
+        .eq("helicoptero_id", helicopteroId)
+        .single();
+
+      const { data: categorias } = await client
+        .from("categorias_producto")
+        .select("id, nombre")
+        .order("orden");
+
+      const { data: items } = await client
+        .from("items")
+        .select("*")
+        .eq("botiquin_id", bot.id)
+        .eq("estado", "activo");
+
+      return { nombreHeli: heli.nombre, categorias, items };
+    }
+
+    async function generarWord() {
+      document.getElementById("estado").innerText = "Generando...";
+      const { nombreHeli, categorias, items } = await obtenerDatos();
+      const fechaEmision = document.getElementById("fechaEmision").value;
+      if (!fechaEmision) { alert("Elige una fecha de emisión."); return; }
+
+      const { Document, Packer, Table, TableRow, TableCell, Paragraph, TextRun,
+              WidthType, ShadingType, AlignmentType, HeadingLevel, VerticalAlign } = docx;
+
+      const anchoCol = [4500, 3000, 1526];
+
+      function celda(texto, ancho, opciones = {}) {
+        return new TableCell({
+          width: { size: ancho, type: WidthType.DXA },
+          shading: opciones.fondo ? { type: ShadingType.CLEAR, fill: opciones.fondo } : undefined,
+          columnSpan: opciones.colSpan || 1,
+          rowSpan: opciones.rowSpan || 1,
+          verticalAlign: VerticalAlign.CENTER,
+          children: [new Paragraph({
+            alignment: opciones.centrado ? AlignmentType.CENTER : AlignmentType.LEFT,
+            children: [new TextRun({ text: texto || "", bold: opciones.bold || false })]
+          })]
+        });
+      }
+
+      const filas = [];
+
+      // Fila título
+      filas.push(new TableRow({
+        children: [
+          celda("BOTIQUÍN DE PRIMEROS AUXILIOS", anchoCol[0] + anchoCol[1], { colSpan: 2, bold: true, fondo: "D9D9D9" }),
+          celda(nombreHeli, anchoCol[2], { bold: true, fondo: "D9D9D9", centrado: true })
+        ]
+      }));
+
+      // Fila "CONTENIDO BÁSICO"
+      filas.push(new TableRow({
+        children: [
+          celda("CONTENIDO BÁSICO", anchoCol[0] + anchoCol[1] + anchoCol[2], { colSpan: 3, bold: true, fondo: "EDEDED", centrado: true })
+        ]
+      }));
+
+      // Fila fija "Lista del contenido"
+      filas.push(new TableRow({
+        children: [
+          celda("Lista del contenido", anchoCol[0], { bold: true }),
+          celda("", anchoCol[1]),
+          celda("X", anchoCol[2], { centrado: true })
+        ]
+      }));
+
+      // Filas por categoría
+      categorias.forEach(cat => {
+        const itemsCategoria = items.filter(i => i.categoria_id === cat.id);
+        const n = Math.max(1, itemsCategoria.length);
+
+        for (let i = 0; i < n; i++) {
+          const item = itemsCategoria[i];
+          const fila = [];
+
+          if (i === 0) {
+            fila.push(celda(cat.nombre, anchoCol[0], { bold: true, rowSpan: n }));
+          }
+
+          if (item) {
+            const producto = [item.marca, item.modelo].filter(Boolean).join(" ");
+            const valorCol3 = item.caduca
+              ? (item.fecha_caducidad || "")
+              : (item.cantidad + " u");
+            fila.push(celda(producto, anchoCol[1]));
+            fila.push(celda(valorCol3, anchoCol[2], { centrado: true }));
+          } else {
+            fila.push(celda("", anchoCol[1]));
+            fila.push(celda("", anchoCol[2]));
+          }
+
+          filas.push(new TableRow({ children: fila }));
+        }
+      });
+
+      const tabla = new Table({
+        width: { size: anchoCol[0] + anchoCol[1] + anchoCol[2], type: WidthType.DXA },
+        columnWidths: anchoCol,
+        rows: filas
+      });
+
+      const doc = new Document({
+        sections: [{
+          children: [
+            tabla,
+            new Paragraph({ text: "" }),
+            new Paragraph({
+              alignment: AlignmentType.CENTER,
+              children: [new TextRun({ text: `Madrid-Cuatro Vientos, a ${formatearFechaLarga(fechaEmision)}` })]
+            }),
+            new Paragraph({
+              alignment: AlignmentType.CENTER,
+              children: [new TextRun({ text: "EL RESPONSABLE G. M. AERONAVEGABILIDAD ESMG 195", bold: true })]
+            })
+          ]
+        }]
+      });
+
+      const blob = await Packer.toBlob(doc);
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `Botiquin_${nombreHeli}.docx`;
+      a.click();
+      document.getElementById("estado").innerText = "Descargado.";
+    }
+  </script>
+</body>
+</html>
