@@ -21,12 +21,26 @@
   <button id="volver" onclick="window.location.href='panel.html'">← Volver al panel</button>
   <button onclick="verHistorico()">Ver histórico</button>
   <h2 id="tituloHeli">Cargando...</h2>
+  <div id="fotoSeccion" style="margin: 15px 0;">
+    <img id="fotoActual" style="max-width: 200px; display: none; border-radius: 6px;">
+    <br>
+    <input type="file" id="inputFoto" accept="image/*">
+    <button onclick="subirFoto()">Guardar foto de portada</button>
+  </div>
   <div>
     Estado del helicóptero:
     <select id="estadoHeli" onchange="cambiarEstadoHeli()">
       <option value="en servicio">En servicio</option>
       <option value="fuera de servicio">Fuera de servicio</option>
     </select>
+  </div>
+
+  <div id="documentosSeccion" style="margin: 20px 0; border-top: 1px solid #ccc; padding-top: 15px;">
+    <h3>Documentos (actas, etc.)</h3>
+    <ul id="listaDocumentos"></ul>
+    <input type="text" id="nombreDocumento" placeholder="Nombre del documento">
+    <input type="file" id="inputDocumento">
+    <button onclick="subirDocumento()">Subir documento</button>
   </div>
 
   <table>
@@ -87,11 +101,15 @@
     async function cargarItems() {
       const { data: heli } = await client
         .from("helicopteros")
-        .select("nombre, estado")
+        .select("nombre, estado, foto_url")
         .eq("id", helicopteroId)
         .single();
       document.getElementById("tituloHeli").innerText = "Botiquín - " + heli.nombre;
       document.getElementById("estadoHeli").value = heli.estado;
+      if (heli.foto_url) {
+        document.getElementById("fotoActual").src = heli.foto_url;
+        document.getElementById("fotoActual").style.display = "inline";
+      }
 
       botiquinId = await obtenerOCrearBotiquin();
 
@@ -117,6 +135,76 @@
           <td><button onclick="prepararReemplazo('${item.id}')">Reemplazar</button></td>`;
         filas.appendChild(tr);
       });
+    }
+
+    async function subirDocumento() {
+      const nombre = document.getElementById("nombreDocumento").value;
+      const archivo = document.getElementById("inputDocumento").files[0];
+      if (!nombre || !archivo) { alert("Pon un nombre y elige un archivo."); return; }
+
+      const ruta = helicopteroId + "/" + Date.now() + "-" + archivo.name;
+      const { error: errorSubida } = await client.storage
+        .from("documentos-helicopteros")
+        .upload(ruta, archivo);
+
+      if (errorSubida) { alert("Error al subir: " + errorSubida.message); return; }
+
+      const { data: sesion } = await client.auth.getSession();
+
+      await client.from("documentos").insert({
+        helicoptero_id: helicopteroId,
+        nombre: nombre,
+        url: ruta,
+        subido_por: sesion.session.user.id
+      });
+
+      document.getElementById("nombreDocumento").value = "";
+      document.getElementById("inputDocumento").value = "";
+      cargarDocumentos();
+    }
+
+    async function cargarDocumentos() {
+      const { data: docs } = await client
+        .from("documentos")
+        .select("*")
+        .eq("helicoptero_id", helicopteroId)
+        .order("creado_en", { ascending: false });
+
+      const lista = document.getElementById("listaDocumentos");
+      lista.innerHTML = "";
+
+      for (const doc of docs) {
+        const { data: firmada } = await client.storage
+          .from("documentos-helicopteros")
+          .createSignedUrl(doc.url, 3600);
+
+        const li = document.createElement("li");
+        li.innerHTML = `<a href="${firmada.signedUrl}" target="_blank">${doc.nombre}</a>`;
+        lista.appendChild(li);
+      }
+    }
+
+    async function subirFoto() {
+      const archivo = document.getElementById("inputFoto").files[0];
+      if (!archivo) { alert("Elige una imagen primero."); return; }
+
+      const ruta = helicopteroId + "-" + Date.now() + "-" + archivo.name;
+      const { error: errorSubida } = await client.storage
+        .from("fotos-helicopteros")
+        .upload(ruta, archivo);
+
+      if (errorSubida) { alert("Error al subir: " + errorSubida.message); return; }
+
+      const { data: publica } = client.storage
+        .from("fotos-helicopteros")
+        .getPublicUrl(ruta);
+
+      await client.from("helicopteros")
+        .update({ foto_url: publica.publicUrl })
+        .eq("id", helicopteroId);
+
+      document.getElementById("fotoActual").src = publica.publicUrl;
+      document.getElementById("fotoActual").style.display = "inline";
     }
 
     function verHistorico() {
@@ -177,6 +265,7 @@
     }
 
     cargarItems();
+    cargarDocumentos();
   </script>
 </body>
 </html>
