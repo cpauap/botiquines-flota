@@ -53,7 +53,8 @@
 
   <div id="formAlta">
     <h3>Añadir producto</h3>
-    <select id="categoria_id"></select>
+    <select id="categoria_id" onchange="cargarProductosCatalogo()"></select>
+    <select id="producto_catalogo" onchange="seleccionarProductoCatalogo()"></select>
     <input type="text" id="marca" placeholder="Marca">
     <input type="text" id="modelo" placeholder="Modelo">
     <label><input type="checkbox" id="caduca" checked onchange="toggleCaduca()"> Caduca</label>
@@ -104,6 +105,59 @@
         opt.innerText = c.nombre;
         select.appendChild(opt);
       });
+
+      cargarProductosCatalogo();
+    }
+
+    async function cargarProductosCatalogo() {
+      const categoriaId = document.getElementById("categoria_id").value;
+      const { data: productos } = await client
+        .from("catalogo_productos")
+        .select("id, marca, modelo")
+        .eq("categoria_id", categoriaId)
+        .order("marca");
+
+      const select = document.getElementById("producto_catalogo");
+      select.innerHTML = "";
+
+      const optNuevo = document.createElement("option");
+      optNuevo.value = "otro";
+      optNuevo.innerText = "Otro (especificar)";
+      select.appendChild(optNuevo);
+
+      (productos || []).forEach(p => {
+        const opt = document.createElement("option");
+        opt.value = p.id;
+        opt.dataset.marca = p.marca;
+        opt.dataset.modelo = p.modelo || "";
+        opt.innerText = [p.marca, p.modelo].filter(Boolean).join(" ");
+        select.appendChild(opt);
+      });
+
+      seleccionarProductoCatalogo();
+    }
+
+    function seleccionarProductoCatalogo() {
+      const valor = document.getElementById("producto_catalogo").value;
+      const inputMarca = document.getElementById("marca");
+      const inputModelo = document.getElementById("modelo");
+
+      if (valor === "otro") {
+        inputMarca.value = "";
+        inputModelo.value = "";
+        inputMarca.style.display = "inline";
+        inputModelo.style.display = "inline";
+        inputMarca.disabled = false;
+        inputModelo.disabled = false;
+      } else {
+        const opt = document.getElementById("producto_catalogo").selectedOptions[0];
+        inputMarca.value = opt.dataset.marca || "";
+        inputModelo.value = opt.dataset.modelo || "";
+        inputMarca.style.display = "none";
+        inputModelo.style.display = "none";
+        inputMarca.disabled = true;
+        inputModelo.disabled = true;
+      }
     }
 
     async function obtenerOCrearBotiquin() {
@@ -280,16 +334,21 @@
         cantidad
       });
 
+      const esProductoNuevo = document.getElementById("producto_catalogo").value === "otro";
+      if (esProductoNuevo) {
+        await client.from("catalogo_productos")
+          .upsert({ categoria_id, marca, modelo }, { onConflict: "categoria_id,marca,modelo" });
+      }
+
       reemplazandoId = null;
       document.getElementById("btnGuardar").innerText = "Guardar";
-      document.getElementById("marca").value = "";
-      document.getElementById("modelo").value = "";
       document.getElementById("caduca").checked = true;
       toggleCaduca();
       document.getElementById("fecha_caducidad").value = "";
       document.getElementById("cantidad").value = "1";
       document.getElementById("nota").value = "";
 
+      await cargarProductosCatalogo();
       cargarItems();
     }
 
