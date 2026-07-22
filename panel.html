@@ -19,6 +19,13 @@
   </div>
   <div class="contenedor">
     <div id="contenido">Cargando...</div>
+
+    <div class="tarjeta">
+      <h3>Añadir helicóptero</h3>
+      <input type="text" id="nombreNuevoHeli" placeholder="Matrícula (ej. EC-XXX)">
+      <select id="baseNuevoHeli"></select>
+      <button onclick="crearHelicoptero()">Añadir</button>
+    </div>
   </div>
 
   <script>
@@ -45,6 +52,15 @@
         .from("bases")
         .select("id, nombre")
         .order("nombre");
+
+      const selectBase = document.getElementById("baseNuevoHeli");
+      selectBase.innerHTML = "";
+      bases.forEach(b => {
+        const opt = document.createElement("option");
+        opt.value = b.id;
+        opt.innerText = b.nombre;
+        selectBase.appendChild(opt);
+      });
 
       const { data: helicopteros } = await client
         .from("helicopteros")
@@ -80,6 +96,20 @@
 
         contenedor.appendChild(grupo);
       });
+    }
+
+    async function crearHelicoptero() {
+      const nombre = document.getElementById("nombreNuevoHeli").value;
+      const base_id = document.getElementById("baseNuevoHeli").value;
+
+      if (!nombre || !base_id) {
+        alert("Pon una matrícula y elige una base.");
+        return;
+      }
+
+      await client.from("helicopteros").insert({ nombre, base_id });
+      document.getElementById("nombreNuevoHeli").value = "";
+      cargarPanel();
     }
 
     cargarPanel();
