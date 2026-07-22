@@ -33,6 +33,9 @@
       <option value="en servicio">En servicio</option>
       <option value="fuera de servicio">Fuera de servicio</option>
     </select>
+    <br><br>
+    Base:
+    <select id="baseHeli" onchange="cambiarBaseHeli()"></select>
   </div>
 
   <div id="documentosSeccion" class="tarjeta">
@@ -181,7 +184,7 @@
     async function cargarItems() {
       const { data: heli } = await client
         .from("helicopteros")
-        .select("nombre, estado, foto_url")
+        .select("nombre, estado, foto_url, base_id")
         .eq("id", helicopteroId)
         .single();
       document.getElementById("tituloHeli").innerText = "Botiquín - " + heli.nombre;
@@ -190,6 +193,17 @@
         document.getElementById("fotoActual").src = heli.foto_url;
         document.getElementById("fotoActual").style.display = "inline";
       }
+
+      const { data: bases } = await client.from("bases").select("id, nombre").order("nombre");
+      const selectBase = document.getElementById("baseHeli");
+      selectBase.innerHTML = "";
+      bases.forEach(b => {
+        const opt = document.createElement("option");
+        opt.value = b.id;
+        opt.innerText = b.nombre;
+        selectBase.appendChild(opt);
+      });
+      selectBase.value = heli.base_id;
 
       botiquinId = await obtenerOCrearBotiquin();
 
@@ -295,6 +309,13 @@
       const nuevoEstado = document.getElementById("estadoHeli").value;
       await client.from("helicopteros")
         .update({ estado: nuevoEstado })
+        .eq("id", helicopteroId);
+    }
+
+    async function cambiarBaseHeli() {
+      const nuevaBase = document.getElementById("baseHeli").value;
+      await client.from("helicopteros")
+        .update({ base_id: nuevaBase })
         .eq("id", helicopteroId);
     }
 
