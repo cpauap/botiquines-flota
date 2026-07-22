@@ -46,7 +46,7 @@
 
       const { data: helicopteros } = await client
         .from("helicopteros")
-        .select("id, nombre, estado, base_id");
+        .select("id, nombre, estado, base_id, foto_url");
 
       const contenedor = document.getElementById("contenido");
       contenedor.innerHTML = "";
@@ -67,7 +67,10 @@
           const fila = document.createElement("div");
           fila.className = "helicoptero";
           const estadoClase = h.estado === "en servicio" ? "en-servicio" : "fuera-servicio";
-          fila.innerHTML = `<span>${h.nombre}</span><span class="${estadoClase}">${h.estado}</span>`;
+          const miniatura = h.foto_url
+            ? `<img src="${h.foto_url}" style="height:30px;width:30px;object-fit:cover;border-radius:4px;margin-right:8px;vertical-align:middle;">`
+            : "";
+          fila.innerHTML = `<span>${miniatura}${h.nombre}</span><span class="${estadoClase}">${h.estado}</span>`;
           fila.style.cursor = "pointer";
           fila.onclick = () => window.location.href = `botiquin.html?helicoptero=${h.id}`;
           grupo.appendChild(fila);
