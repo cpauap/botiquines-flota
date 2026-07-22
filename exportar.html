@@ -80,9 +80,12 @@
       if (!fechaEmision) { alert("Elige una fecha de emisión."); return; }
 
       const { Document, Packer, Table, TableRow, TableCell, Paragraph, TextRun,
-              WidthType, ShadingType, AlignmentType, HeadingLevel, VerticalAlign } = docx;
+              WidthType, ShadingType, AlignmentType, HeadingLevel, VerticalAlign, BorderStyle } = docx;
 
       const anchoCol = [5426, 3600, 1500];
+
+      const bordeFino = { style: BorderStyle.SINGLE, size: 4, color: "000000" };
+      const bordesCelda = { top: bordeFino, bottom: bordeFino, left: bordeFino, right: bordeFino };
 
       function celda(texto, ancho, opciones = {}) {
         return new TableCell({
@@ -91,6 +94,7 @@
           columnSpan: opciones.colSpan || 1,
           rowSpan: opciones.rowSpan || 1,
           verticalAlign: VerticalAlign.CENTER,
+          borders: bordesCelda,
           children: [new Paragraph({
             alignment: opciones.centrado ? AlignmentType.CENTER : AlignmentType.LEFT,
             children: [new TextRun({ text: texto || "", bold: opciones.bold || false })]
