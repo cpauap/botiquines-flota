@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>Categorías</title>
+<link rel="stylesheet" href="estilo.css">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+  .fila-categoria { display: flex; align-items: center; justify-content: space-between; padding: 8px 12px; border-bottom: 1px solid var(--gris-borde); background: var(--blanco); }
+  .fila-categoria:first-child { border-radius: 6px 6px 0 0; }
+  .fila-categoria:last-child { border-bottom: none; border-radius: 0 0 6px 6px; }
+  .fila-categoria input[type="text"] { width: 320px; }
+  .flechas button { padding: 4px 8px; margin-left: 4px; }
+</style>
+</head>
+<body>
+  <div class="barra-superior">
+    <h1>Categorías de producto</h1>
+    <button onclick="window.location.href='panel.html'">← Panel</button>
+  </div>
+  <div class="contenedor">
+
+  <div class="tarjeta">
+    <h3>Añadir categoría</h3>
+    <input type="text" id="nombreNueva" placeholder="Nombre de la categoría" style="width: 320px;">
+    <button onclick="añadirCategoria()">Añadir</button>
+  </div>
+
+  <div class="tarjeta" id="listaCategorias"></div>
+  </div>
+
+  <script>
+    const SUPABASE_URL = "https://pfyvliaknlpuawuppsko.supabase.co";
+    const SUPABASE_KEY = "sb_publishable_f3F70B-1EnU3aRpQaFu7_A_szShexxl";
+    const client = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+    async function cargarCategorias() {
+      const { data: categorias } = await client
+        .from("categorias_producto")
+        .select("id, nombre, orden")
+        .order("orden");
+
+      const contenedor = document.getElementById("listaCategorias");
+      contenedor.innerHTML = "";
+
+      categorias.forEach((cat, i) => {
+        const fila = document.createElement("div");
+        fila.className = "fila-categoria";
+        fila.innerHTML = `
+          <input type="text" value="${cat.nombre}" onchange="renombrarCategoria('${cat.id}', this.value)">
+          <span class="flechas">
+            <button onclick="moverCategoria(${i}, -1)" ${i === 0 ? "disabled" : ""}>↑</button>
+            <button onclick="moverCategoria(${i}, 1)" ${i === categorias.length - 1 ? "disabled" : ""}>↓</button>
+            <button onclick="borrarCategoria('${cat.id}')">Eliminar</button>
+          </span>`;
+        contenedor.appendChild(fila);
+      });
+
+      window.categoriasActuales = categorias;
+    }
+
+    async function añadirCategoria() {
+      const nombre = document.getElementById("nombreNueva").value;
+      if (!nombre) { alert("Escribe un nombre."); return; }
+
+      const maxOrden = (window.categoriasActuales || []).reduce((m, c) => Math.max(m, c.orden), 0);
+      await client.from("categorias_producto").insert({ nombre, orden: maxOrden + 1 });
+      document.getElementById("nombreNueva").value = "";
+      cargarCategorias();
+    }
+
+    async function renombrarCategoria(id, nuevoNombre) {
+      await client.from("categorias_producto").update({ nombre: nuevoNombre }).eq("id", id);
+    }
+
+    async function borrarCategoria(id) {
+      if (!confirm("¿Eliminar esta categoría? Los productos ya asignados a ella no se borran, pero quedarán sin categoría en los documentos.")) return;
+      await client.from("categorias_producto").delete().eq("id", id);
+      cargarCategorias();
+    }
+
+    async function moverCategoria(indice, direccion) {
+      const categorias = window.categoriasActuales;
+      const otro = indice + direccion;
+      if (otro < 0 || otro >= categorias.length) return;
+
+      const a = categorias[indice];
+      const b = categorias[otro];
+
+      await client.from("categorias_producto").update({ orden: b.orden }).eq("id", a.id);
+      await client.from("categorias_producto").update({ orden: a.orden }).eq("id", b.id);
+
+      cargarCategorias();
+    }
+
+    cargarCategorias();
+  </script>
+</body>
+</html>
