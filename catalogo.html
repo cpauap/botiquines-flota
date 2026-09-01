@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>Catálogo de productos</title>
+<link rel="stylesheet" href="estilo.css">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+  .categoria-bloque { margin-bottom: 18px; }
+  .categoria-titulo { background: var(--azul-acero); color: var(--blanco); padding: 8px 12px; font-weight: 600; border-radius: 6px 6px 0 0; }
+  .producto-fila { padding: 8px 12px; border-bottom: 1px solid var(--gris-borde); border-left: 1px solid var(--gris-borde); border-right: 1px solid var(--gris-borde); display: flex; justify-content: space-between; align-items: center; background: var(--blanco); }
+  .producto-fila:last-child { border-radius: 0 0 6px 6px; }
+  .producto-fila input { margin-right: 6px; }
+</style>
+</head>
+<body>
+  <div class="barra-superior">
+    <h1>Catálogo de productos</h1>
+    <button onclick="window.location.href='panel.html'">← Panel</button>
+  </div>
+  <div class="contenedor">
+
+  <div class="tarjeta">
+    <h3>Añadir producto al catálogo</h3>
+    <select id="categoriaNuevo"></select>
+    <input type="text" id="marcaNuevo" placeholder="Marca">
+    <input type="text" id="modeloNuevo" placeholder="Medida / modelo">
+    <button onclick="añadirProducto()">Añadir</button>
+  </div>
+
+  <div id="listaCategorias"></div>
+  </div>
+
+  <script>
+    const SUPABASE_URL = "https://pfyvliaknlpuawuppsko.supabase.co";
+    const SUPABASE_KEY = "sb_publishable_f3F70B-1EnU3aRpQaFu7_A_szShexxl";
+    const client = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+    let categorias = [];
+
+    async function cargarCategorias() {
+      const { data } = await client.from("categorias_producto").select("id, nombre").order("orden");
+      categorias = data;
+
+      const select = document.getElementById("categoriaNuevo");
+      select.innerHTML = "";
+      categorias.forEach(c => {
+        const opt = document.createElement("option");
+        opt.value = c.id;
+        opt.innerText = c.nombre;
+        select.appendChild(opt);
+      });
+    }
+
+    async function cargarCatalogo() {
+      const { data: productos } = await client
+        .from("catalogo_productos")
+        .select("id, marca, modelo, categoria_id")
+        .order("marca");
+
+      const contenedor = document.getElementById("listaCategorias");
+      contenedor.innerHTML = "";
+
+      categorias.forEach(cat => {
+        const productosCategoria = productos.filter(p => p.categoria_id === cat.id);
+
+        const bloque = document.createElement("div");
+        bloque.className = "categoria-bloque";
+
+        const titulo = document.createElement("div");
+        titulo.className = "categoria-titulo";
+        titulo.innerText = cat.nombre;
+        bloque.appendChild(titulo);
+
+        if (productosCategoria.length === 0) {
+          const vacio = document.createElement("div");
+          vacio.className = "producto-fila";
+          vacio.innerHTML = "<span style='color:#888;'>Sin productos todavía</span>";
+          bloque.appendChild(vacio);
+        }
+
+        productosCategoria.forEach(p => {
+          const fila = document.createElement("div");
+          fila.className = "producto-fila";
+          fila.innerHTML = `
+            <span>
+              <input type="text" value="${p.marca}" onchange="editarProducto('${p.id}', 'marca', this.value)" style="width:150px;">
+              <input type="text" value="${p.modelo || ''}" onchange="editarProducto('${p.id}', 'modelo', this.value)" style="width:150px;">
+            </span>
+            <button onclick="borrarProducto('${p.id}')">Eliminar</button>`;
+          bloque.appendChild(fila);
+        });
+
+        contenedor.appendChild(bloque);
+      });
+    }
+
+    async function añadirProducto() {
+      const categoria_id = document.getElementById("categoriaNuevo").value;
+      const marca = document.getElementById("marcaNuevo").value;
+      const modelo = document.getElementById("modeloNuevo").value;
+
+      if (!marca) { alert("Pon al menos la marca."); return; }
+
+      const { error } = await client.from("catalogo_productos").insert({ categoria_id, marca, modelo });
+      if (error) { alert("Error: " + error.message); return; }
+
+      document.getElementById("marcaNuevo").value = "";
+      document.getElementById("modeloNuevo").value = "";
+      cargarCatalogo();
+    }
+
+    async function editarProducto(id, campo, valor) {
+      await client.from("catalogo_productos").update({ [campo]: valor }).eq("id", id);
+    }
+
+    async function borrarProducto(id) {
+      if (!confirm("¿Eliminar este producto del catálogo? Los ítems ya asignados en botiquines no se ven afectados.")) return;
+      await client.from("catalogo_productos").delete().eq("id", id);
+      cargarCatalogo();
+    }
+
+    async function iniciar() {
+      await cargarCategorias();
+      await cargarCatalogo();
+    }
+
+    iniciar();
+  </script>
+</body>
+</html>
