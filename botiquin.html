@@ -181,6 +181,12 @@
       return data.id;
     }
 
+    function limpiarNombreArchivo(nombre) {
+      return nombre
+        .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+        .replace(/[^a-zA-Z0-9.\-_]/g, "_");
+    }
+
     async function cargarItems() {
       const { data: heli } = await client
         .from("helicopteros")
@@ -236,7 +242,7 @@
       const archivo = document.getElementById("inputDocumento").files[0];
       if (!nombre || !archivo) { alert("Pon un nombre y elige un archivo."); return; }
 
-      const ruta = helicopteroId + "/" + Date.now() + "-" + archivo.name;
+      const ruta = helicopteroId + "/" + Date.now() + "-" + limpiarNombreArchivo(archivo.name);
       const { error: errorSubida } = await client.storage
         .from("documentos-helicopteros")
         .upload(ruta, archivo);
@@ -282,7 +288,7 @@
       const archivo = document.getElementById("inputFoto").files[0];
       if (!archivo) { alert("Elige una imagen primero."); return; }
 
-      const ruta = helicopteroId + "-" + Date.now() + "-" + archivo.name;
+      const ruta = helicopteroId + "-" + Date.now() + "-" + limpiarNombreArchivo(archivo.name);
       const { error: errorSubida } = await client.storage
         .from("fotos-helicopteros")
         .upload(ruta, archivo);
