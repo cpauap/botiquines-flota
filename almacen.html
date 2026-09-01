@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>Almacén</title>
+<link rel="stylesheet" href="estilo.css">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+  .categoria-bloque { margin-bottom: 18px; }
+  .categoria-titulo { background: var(--azul-acero); color: var(--blanco); padding: 8px 12px; font-weight: 600; border-radius: 6px 6px 0 0; }
+  table { width: 100%; }
+</style>
+</head>
+<body>
+  <div class="barra-superior">
+    <h1>Almacén</h1>
+    <button onclick="window.location.href='panel.html'">← Panel</button>
+  </div>
+  <div class="contenedor">
+
+  <div class="tarjeta">
+    <h3>Añadir lote al almacén</h3>
+    <select id="categoriaNuevo" onchange="cargarProductosCatalogo()"></select>
+    <select id="productoNuevo" onchange="seleccionarProducto()"></select>
+    <input type="text" id="marcaNuevo" placeholder="Marca">
+    <input type="text" id="modeloNuevo" placeholder="Medida / modelo">
+    <input type="date" id="caducidadNuevo">
+    <input type="number" id="cantidadNuevo" placeholder="Cantidad" value="1" min="1">
+    <button onclick="añadirLote()">Añadir al almacén</button>
+  </div>
+
+  <div id="listaCategorias"></div>
+  </div>
+
+  <script>
+    const SUPABASE_URL = "https://pfyvliaknlpuawuppsko.supabase.co";
+    const SUPABASE_KEY = "sb_publishable_f3F70B-1EnU3aRpQaFu7_A_szShexxl";
+    const client = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+    let categorias = [];
+
+    async function cargarCategorias() {
+      const { data } = await client.from("categorias_producto").select("id, nombre").order("orden");
+      categorias = data;
+
+      const select = document.getElementById("categoriaNuevo");
+      select.innerHTML = "";
+      categorias.forEach(c => {
+        const opt = document.createElement("option");
+        opt.value = c.id;
+        opt.innerText = c.nombre;
+        select.appendChild(opt);
+      });
+
+      cargarProductosCatalogo();
+    }
+
+    async function cargarProductosCatalogo() {
+      const categoriaId = document.getElementById("categoriaNuevo").value;
+      const { data: productos } = await client
+        .from("catalogo_productos")
+        .select("id, marca, modelo")
+        .eq("categoria_id", categoriaId)
+        .order("marca");
+
+      const select = document.getElementById("productoNuevo");
+      select.innerHTML = "";
+
+      const optNuevo = document.createElement("option");
+      optNuevo.value = "otro";
+      optNuevo.innerText = "Otro (especificar)";
+      select.appendChild(optNuevo);
+
+      (productos || []).forEach(p => {
+        const opt = document.createElement("option");
+        opt.value = p.id;
+        opt.dataset.marca = p.marca;
+        opt.dataset.modelo = p.modelo || "";
+        opt.innerText = [p.marca, p.modelo].filter(Boolean).join(" ");
+        select.appendChild(opt);
+      });
+
+      seleccionarProducto();
+    }
+
+    function seleccionarProducto() {
+      const valor = document.getElementById("productoNuevo").value;
+      const inputMarca = document.getElementById("marcaNuevo");
+      const inputModelo = document.getElementById("modeloNuevo");
+
+      if (valor === "otro") {
+        inputMarca.value = "";
+        inputModelo.value = "";
+        inputMarca.disabled = false;
+        inputModelo.disabled = false;
+      } else {
+        const opt = document.getElementById("productoNuevo").selectedOptions[0];
+        inputMarca.value = opt.dataset.marca || "";
+        inputModelo.value = opt.dataset.modelo || "";
+        inputMarca.disabled = true;
+        inputModelo.disabled = true;
+      }
+    }
+
+    async function añadirLote() {
+      const categoria_id = document.getElementById("categoriaNuevo").value;
+      const marca = document.getElementById("marcaNuevo").value;
+      const modelo = document.getElementById("modeloNuevo").value;
+      const fecha_caducidad = document.getElementById("caducidadNuevo").value;
+      const cantidad = document.getElementById("cantidadNuevo").value;
+
+      if (!marca || !fecha_caducidad) {
+        alert("Rellena al menos marca y fecha de caducidad.");
+        return;
+      }
+
+      const esProductoNuevo = document.getElementById("productoNuevo").value === "otro";
+      if (esProductoNuevo) {
+        await client.from("catalogo_productos")
+          .upsert({ categoria_id, marca, modelo }, { onConflict: "categoria_id,marca,modelo" });
+      }
+
+      await client.from("almacen").insert({ categoria_id, marca, modelo, fecha_caducidad, cantidad });
+
+      document.getElementById("caducidadNuevo").value = "";
+      document.getElementById("cantidadNuevo").value = "1";
+      await cargarProductosCatalogo();
+      cargarAlmacen();
+    }
+
+    function claseSemaforo(fecha) {
+      const hoy = new Date();
+      const cad = new Date(fecha);
+      const dias = Math.floor((cad - hoy) / (1000 * 60 * 60 * 24));
+      if (dias < 0) return "rojo";
+      if (dias <= 45) return dias <= 15 ? "rojo" : "ambar";
+      return "verde";
+    }
+
+    async function cargarAlmacen() {
+      const { data: lotes } = await client
+        .from("almacen")
+        .select("*")
+        .order("fecha_caducidad");
+
+      const contenedor = document.getElementById("listaCategorias");
+      contenedor.innerHTML = "";
+
+      categorias.forEach(cat => {
+        const lotesCategoria = lotes.filter(l => l.categoria_id === cat.id);
+        if (lotesCategoria.length === 0) return;
+
+        const bloque = document.createElement("div");
+        bloque.className = "categoria-bloque tarjeta";
+
+        const titulo = document.createElement("div");
+        titulo.className = "categoria-titulo";
+        titulo.innerText = cat.nombre;
+        bloque.appendChild(titulo);
+
+        const tabla = document.createElement("table");
+        tabla.innerHTML = `<thead><tr><th>Marca</th><th>Modelo</th><th>Caducidad</th><th>Cantidad</th><th></th></tr></thead><tbody></tbody>`;
+        const tbody = tabla.querySelector("tbody");
+
+        lotesCategoria.forEach(l => {
+          const tr = document.createElement("tr");
+          tr.className = claseSemaforo(l.fecha_caducidad);
+          tr.innerHTML = `
+            <td>${l.marca}</td>
+            <td>${l.modelo || ""}</td>
+            <td>${l.fecha_caducidad}</td>
+            <td>${l.cantidad}</td>
+            <td><button onclick="borrarLote('${l.id}')">Eliminar</button></td>`;
+          tbody.appendChild(tr);
+        });
+
+        bloque.appendChild(tabla);
+        contenedor.appendChild(bloque);
+      });
+    }
+
+    async function borrarLote(id) {
+      if (!confirm("¿Eliminar este lote del almacén?")) return;
+      await client.from("almacen").delete().eq("id", id);
+      cargarAlmacen();
+    }
+
+    async function iniciar() {
+      await cargarCategorias();
+      await cargarAlmacen();
+    }
+
+    iniciar();
+  </script>
+</body>
+</html>
