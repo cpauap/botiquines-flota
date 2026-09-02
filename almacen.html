@@ -166,10 +166,10 @@
           const tr = document.createElement("tr");
           tr.className = claseSemaforo(l.fecha_caducidad);
           tr.innerHTML = `
-            <td>${l.marca}</td>
-            <td>${l.modelo || ""}</td>
-            <td>${l.fecha_caducidad}</td>
-            <td>${l.cantidad}</td>
+            <td><input type="text" value="${l.marca}" onchange="editarLote('${l.id}', 'marca', this.value)" style="width:120px;"></td>
+            <td><input type="text" value="${l.modelo || ''}" onchange="editarLote('${l.id}', 'modelo', this.value)" style="width:120px;"></td>
+            <td><input type="date" value="${l.fecha_caducidad}" onchange="editarLote('${l.id}', 'fecha_caducidad', this.value)"></td>
+            <td><input type="number" value="${l.cantidad}" min="1" onchange="editarLote('${l.id}', 'cantidad', this.value)" style="width:60px;"></td>
             <td><button onclick="borrarLote('${l.id}')">Eliminar</button></td>`;
           tbody.appendChild(tr);
         });
@@ -177,6 +177,12 @@
         bloque.appendChild(tabla);
         contenedor.appendChild(bloque);
       });
+    }
+
+    async function editarLote(id, campo, valor) {
+      const valorFinal = campo === "cantidad" ? parseInt(valor) : valor;
+      await client.from("almacen").update({ [campo]: valorFinal }).eq("id", id);
+      cargarAlmacen();
     }
 
     async function borrarLote(id) {
