@@ -47,7 +47,7 @@
 
     function formatearFechaLarga(fechaISO) {
       const [anio, mes, dia] = fechaISO.split("-");
-      return `${parseInt(dia)} de ${MESES[parseInt(mes) - 1]} ${anio}`;
+      return `${parseInt(dia)} de ${MESES[parseInt(mes) - 1]} de ${anio}`;
     }
 
     async function obtenerDatos() {
@@ -77,6 +77,13 @@
       return { nombreHeli: heli.nombre, categorias, items };
     }
 
+    function idsQueCaducanAntesGlobal(items) {
+      const conFecha = items.filter(i => i.caduca && i.fecha_caducidad);
+      if (conFecha.length === 0) return new Set();
+      const minFecha = conFecha.reduce((min, i) => i.fecha_caducidad < min ? i.fecha_caducidad : min, conFecha[0].fecha_caducidad);
+      return new Set(conFecha.filter(i => i.fecha_caducidad === minFecha).map(i => i.id));
+    }
+
     async function generarWord() {
       document.getElementById("estado").innerText = "Generando...";
       const { nombreHeli, categorias, items } = await obtenerDatos();
@@ -84,7 +91,7 @@
       if (!fechaEmision) { alert("Elige una fecha de emisión."); return; }
 
       const { Document, Packer, Table, TableRow, TableCell, Paragraph, TextRun,
-              WidthType, ShadingType, AlignmentType, HeadingLevel, VerticalAlign, BorderStyle } = docx;
+              WidthType, ShadingType, AlignmentType, HeadingLevel, VerticalAlign, BorderStyle, UnderlineType } = docx;
 
       const anchoCol = [5426, 3600, 1500];
 
@@ -101,14 +108,18 @@
           borders: bordesCelda,
           children: [new Paragraph({
             alignment: opciones.centrado ? AlignmentType.CENTER : AlignmentType.LEFT,
-            children: [new TextRun({ text: texto || "", bold: opciones.bold || false })]
+            children: [new TextRun({
+              text: texto || "",
+              bold: opciones.bold || false,
+              underline: opciones.subrayado ? { type: UnderlineType.SINGLE } : undefined
+            })]
           })]
         });
       }
 
       const filas = [];
+      const idsMasProximo = idsQueCaducanAntesGlobal(items);
 
-      // Fila título
       filas.push(new TableRow({
         children: [
           celda("BOTIQUÍN DE PRIMEROS AUXILIOS", anchoCol[0] + anchoCol[1], { colSpan: 2, bold: true, fondo: "D9D9D9" }),
@@ -116,14 +127,12 @@
         ]
       }));
 
-      // Fila "CONTENIDO BÁSICO"
       filas.push(new TableRow({
         children: [
           celda("CONTENIDO BÁSICO", anchoCol[0] + anchoCol[1] + anchoCol[2], { colSpan: 3, bold: true, fondo: "EDEDED", centrado: true })
         ]
       }));
 
-      // Fila fija "Lista del contenido"
       filas.push(new TableRow({
         children: [
           celda("Lista del contenido", anchoCol[0], { bold: true }),
@@ -132,7 +141,6 @@
         ]
       }));
 
-      // Filas por categoría
       categorias.forEach(cat => {
         const itemsCategoria = items.filter(i => i.categoria_id === cat.id);
         const n = Math.max(1, itemsCategoria.length);
@@ -147,11 +155,10 @@
 
           if (item) {
             const producto = [item.marca, item.modelo].filter(Boolean).join(" ");
-            const valorCol3 = item.caduca
-              ? (item.fecha_caducidad || "")
-              : (item.cantidad + " u");
-            fila.push(celda(producto, anchoCol[1]));
-            fila.push(celda(valorCol3, anchoCol[2], { centrado: true }));
+            const valorCol3 = item.caduca ? (item.fecha_caducidad || "") : (item.cantidad + " u");
+            const subrayar = idsMasProximo.has(item.id);
+            fila.push(celda(producto, anchoCol[1], { subrayado: subrayar }));
+            fila.push(celda(valorCol3, anchoCol[2], { centrado: true, subrayado: subrayar }));
           } else {
             fila.push(celda("", anchoCol[1]));
             fila.push(celda("", anchoCol[2]));
@@ -185,7 +192,7 @@
             }),
             new Paragraph({
               alignment: AlignmentType.CENTER,
-              children: [new TextRun({ text: "EL RESPONSABLE G. M. AERONAVEGABILIDAD ESMG 195", bold: true })]
+              children: [new TextRun({ text: "EL RESPONSABLE DE LA AERONAVEGABILIDAD ES.CAO.027", bold: true })]
             })
           ]
         }]
@@ -207,6 +214,7 @@
       if (!fechaEmision) { alert("Elige una fecha de emisión."); return; }
 
       const cuerpo = [];
+      const idsMasProximo = idsQueCaducanAntesGlobal(items);
 
       cuerpo.push([
         { text: "BOTIQUÍN DE PRIMEROS AUXILIOS", colSpan: 2, bold: true, fillColor: "#D9D9D9" }, {},
@@ -236,8 +244,9 @@
           if (item) {
             const producto = [item.marca, item.modelo].filter(Boolean).join(" ");
             const valorCol3 = item.caduca ? (item.fecha_caducidad || "") : (item.cantidad + " u");
-            fila.push({ text: producto });
-            fila.push({ text: valorCol3, alignment: "center" });
+            const subrayar = idsMasProximo.has(item.id) ? "underline" : undefined;
+            fila.push({ text: producto, decoration: subrayar });
+            fila.push({ text: valorCol3, alignment: "center", decoration: subrayar });
           } else {
             fila.push({ text: "" });
             fila.push({ text: "" });
@@ -256,7 +265,7 @@
           },
           { text: "", margin: [0, 15, 0, 0] },
           { text: `Madrid-Cuatro Vientos, a ${formatearFechaLarga(fechaEmision)}`, alignment: "center" },
-          { text: "EL RESPONSABLE G. M. AERONAVEGABILIDAD ESMG 195", alignment: "center", bold: true }
+          { text: "EL RESPONSABLE DE LA AERONAVEGABILIDAD ES.CAO.027", alignment: "center", bold: true }
         ],
         defaultStyle: { fontSize: 9 }
       };
