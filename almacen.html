@@ -24,6 +24,7 @@
     <select id="productoNuevo" onchange="seleccionarProducto()"></select>
     <input type="text" id="marcaNuevo" placeholder="Marca">
     <input type="text" id="modeloNuevo" placeholder="Medida / modelo">
+    <label><input type="checkbox" id="caducaNuevo" checked onchange="toggleCaducaNuevo()"> Caduca</label>
     <input type="date" id="caducidadNuevo">
     <input type="number" id="cantidadNuevo" placeholder="Cantidad" value="1" min="1">
     <button onclick="añadirLote()">Añadir al almacén</button>
@@ -102,15 +103,21 @@
       }
     }
 
+    function toggleCaducaNuevo() {
+      document.getElementById("caducidadNuevo").style.display =
+        document.getElementById("caducaNuevo").checked ? "inline" : "none";
+    }
+
     async function añadirLote() {
       const categoria_id = document.getElementById("categoriaNuevo").value;
       const marca = document.getElementById("marcaNuevo").value;
       const modelo = document.getElementById("modeloNuevo").value;
+      const caduca = document.getElementById("caducaNuevo").checked;
       const fecha_caducidad = document.getElementById("caducidadNuevo").value;
       const cantidad = document.getElementById("cantidadNuevo").value;
 
-      if (!marca || !fecha_caducidad) {
-        alert("Rellena al menos marca y fecha de caducidad.");
+      if (!marca || (caduca && !fecha_caducidad)) {
+        alert("Rellena al menos marca, y la fecha de caducidad si el producto caduca.");
         return;
       }
 
@@ -120,17 +127,24 @@
           .upsert({ categoria_id, marca, modelo }, { onConflict: "categoria_id,marca,modelo" });
       }
 
-      await client.from("almacen").insert({ categoria_id, marca, modelo, fecha_caducidad, cantidad });
+      await client.from("almacen").insert({
+        categoria_id, marca, modelo, caduca,
+        fecha_caducidad: caduca ? fecha_caducidad : null,
+        cantidad
+      });
 
+      document.getElementById("caducaNuevo").checked = true;
+      toggleCaducaNuevo();
       document.getElementById("caducidadNuevo").value = "";
       document.getElementById("cantidadNuevo").value = "1";
       await cargarProductosCatalogo();
       cargarAlmacen();
     }
 
-    function claseSemaforo(fecha) {
+    function claseSemaforo(lote) {
+      if (!lote.caduca || !lote.fecha_caducidad) return "";
       const hoy = new Date();
-      const cad = new Date(fecha);
+      const cad = new Date(lote.fecha_caducidad);
       const dias = Math.floor((cad - hoy) / (1000 * 60 * 60 * 24));
       if (dias < 0) return "rojo";
       if (dias <= 45) return dias <= 15 ? "rojo" : "ambar";
@@ -159,16 +173,17 @@
         bloque.appendChild(titulo);
 
         const tabla = document.createElement("table");
-        tabla.innerHTML = `<thead><tr><th>Marca</th><th>Modelo</th><th>Caducidad</th><th>Cantidad</th><th></th></tr></thead><tbody></tbody>`;
+        tabla.innerHTML = `<thead><tr><th>Marca</th><th>Modelo</th><th>Caduca</th><th>Caducidad</th><th>Cantidad</th><th></th></tr></thead><tbody></tbody>`;
         const tbody = tabla.querySelector("tbody");
 
         lotesCategoria.forEach(l => {
           const tr = document.createElement("tr");
-          tr.className = claseSemaforo(l.fecha_caducidad);
+          tr.className = claseSemaforo(l);
           tr.innerHTML = `
             <td><input type="text" value="${l.marca}" onchange="editarLote('${l.id}', 'marca', this.value)" style="width:120px;"></td>
             <td><input type="text" value="${l.modelo || ''}" onchange="editarLote('${l.id}', 'modelo', this.value)" style="width:120px;"></td>
-            <td><input type="date" value="${l.fecha_caducidad}" onchange="editarLote('${l.id}', 'fecha_caducidad', this.value)"></td>
+            <td><input type="checkbox" ${l.caduca ? "checked" : ""} onchange="editarCaducaLote('${l.id}', this.checked)"></td>
+            <td><input type="date" value="${l.fecha_caducidad || ''}" ${l.caduca ? "" : "disabled"} onchange="editarLote('${l.id}', 'fecha_caducidad', this.value)"></td>
             <td><input type="number" value="${l.cantidad}" min="1" onchange="editarLote('${l.id}', 'cantidad', this.value)" style="width:60px;"></td>
             <td><button onclick="borrarLote('${l.id}')">Eliminar</button></td>`;
           tbody.appendChild(tr);
@@ -177,6 +192,13 @@
         bloque.appendChild(tabla);
         contenedor.appendChild(bloque);
       });
+    }
+
+    async function editarCaducaLote(id, marcado) {
+      const cambios = { caduca: marcado };
+      if (!marcado) cambios.fecha_caducidad = null;
+      await client.from("almacen").update(cambios).eq("id", id);
+      cargarAlmacen();
     }
 
     async function editarLote(id, campo, valor) {
