@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>Resumen de la flota</title>
+<link rel="stylesheet" href="estilo.css">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="pdfmake.min.js"></script>
+<script src="vfs_fonts.js"></script>
+<style>
+  table { width: 100%; border-collapse: collapse; }
+  .amarillo-proximo { background-color: #FFF176 !important; }
+</style>
+</head>
+<body>
+  <div class="barra-superior">
+    <h1>Resumen de la flota</h1>
+    <div>
+      <button onclick="generarPDF()">Descargar PDF</button>
+      <button onclick="window.location.href='panel.html'">← Panel</button>
+    </div>
+  </div>
+  <div class="contenedor">
+  <div class="tarjeta">
+    <table>
+      <thead>
+        <tr><th>Base</th><th>Helicóptero</th><th>Categoría</th><th>Marca</th><th>Modelo</th><th>Caducidad / Cantidad</th></tr>
+      </thead>
+      <tbody id="filasResumen"></tbody>
+    </table>
+  </div>
+  </div>
+
+  <script>
+    const SUPABASE_URL = "https://pfyvliaknlpuawuppsko.supabase.co";
+    const SUPABASE_KEY = "sb_publishable_f3F70B-1EnU3aRpQaFu7_A_szShexxl";
+    const client = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+    let filasCalculadas = [];
+
+    async function obtenerDatosFlota() {
+      const { data: bases } = await client.from("bases").select("id, nombre");
+      const { data: helicopteros } = await client.from("helicopteros").select("id, nombre, base_id");
+      const { data: botiquines } = await client.from("botiquines").select("id, helicoptero_id");
+      const { data: categorias } = await client.from("categorias_producto").select("id, nombre");
+      const { data: items } = await client
+        .from("items")
+        .select("*")
+        .eq("estado", "activo");
+
+      const mapaBases = Object.fromEntries(bases.map(b => [b.id, b.nombre]));
+      const mapaHelis = Object.fromEntries(helicopteros.map(h => [h.id, h]));
+      const mapaBotiquines = Object.fromEntries(botiquines.map(b => [b.id, b.helicoptero_id]));
+      const mapaCategorias = Object.fromEntries(categorias.map(c => [c.id, c.nombre]));
+
+      const filas = items.map(item => {
+        const helicopteroId = mapaBotiquines[item.botiquin_id];
+        const heli = mapaHelis[helicopteroId] || {};
+        return {
+          base: mapaBases[heli.base_id] || "",
+          helicoptero: heli.nombre || "",
+          categoria: mapaCategorias[item.categoria_id] || "",
+          marca: item.marca,
+          modelo: item.modelo || "",
+          caduca: item.caduca,
+          fecha_caducidad: item.fecha_caducidad,
+          cantidad: item.cantidad
+        };
+      });
+
+      return filas;
+    }
+
+    function calcularEstados(filas) {
+      const hoy = new Date().toISOString().split("T")[0];
+
+      filas.forEach(f => {
+        f.expirado = f.caduca && f.fecha_caducidad && f.fecha_caducidad < hoy;
+      });
+
+      const noExpirados = filas.filter(f => f.caduca && f.fecha_caducidad && !f.expirado);
+      if (noExpirados.length > 0) {
+        const minFecha = noExpirados.reduce((min, f) => f.fecha_caducidad < min ? f.fecha_caducidad : min, noExpirados[0].fecha_caducidad);
+        filas.forEach(f => { f.esProximo = !f.expirado && f.caduca && f.fecha_caducidad === minFecha; });
+      }
+
+      filas.sort((a, b) => {
+        if (!a.fecha_caducidad) return 1;
+        if (!b.fecha_caducidad) return -1;
+        return a.fecha_caducidad < b.fecha_caducidad ? -1 : 1;
+      });
+
+      return filas;
+    }
+
+    async function cargarResumen() {
+      const filas = calcularEstados(await obtenerDatosFlota());
+      filasCalculadas = filas;
+
+      const tbody = document.getElementById("filasResumen");
+      tbody.innerHTML = "";
+
+      filas.forEach(f => {
+        const tr = document.createElement("tr");
+        if (f.expirado) tr.className = "rojo";
+        else if (f.esProximo) tr.className = "amarillo-proximo";
+
+        const valorCol = f.caduca ? (f.fecha_caducidad || "") : (f.cantidad + " u");
+        tr.innerHTML = `
+          <td>${f.base}</td>
+          <td>${f.helicoptero}</td>
+          <td>${f.categoria}</td>
+          <td>${f.marca}</td>
+          <td>${f.modelo}</td>
+          <td>${valorCol}</td>`;
+        tbody.appendChild(tr);
+      });
+    }
+
+    function generarPDF() {
+      const cuerpo = [
+        [
+          { text: "Base", bold: true },
+          { text: "Helicóptero", bold: true },
+          { text: "Categoría", bold: true },
+          { text: "Marca", bold: true },
+          { text: "Modelo", bold: true },
+          { text: "Caducidad/Cantidad", bold: true }
+        ]
+      ];
+
+      filasCalculadas.forEach(f => {
+        const valorCol = f.caduca ? (f.fecha_caducidad || "") : (f.cantidad + " u");
+        const color = f.expirado ? "#F8D7DA" : (f.esProximo ? "#FFF176" : undefined);
+        const fila = [f.base, f.helicoptero, f.categoria, f.marca, f.modelo, valorCol]
+          .map(texto => ({ text: texto, fillColor: color }));
+        cuerpo.push(fila);
+      });
+
+      const docDefinition = {
+        pageOrientation: "landscape",
+        pageMargins: [30, 30, 30, 30],
+        content: [
+          { text: "Resumen de la flota - Botiquines", fontSize: 14, bold: true, margin: [0, 0, 0, 10] },
+          { table: { headerRows: 1, widths: ["auto", "auto", "*", "*", "*", "auto"], body: cuerpo } }
+        ],
+        defaultStyle: { fontSize: 8 }
+      };
+
+      pdfMake.createPdf(docDefinition).download("Resumen_flota_botiquines.pdf");
+    }
+
+    cargarResumen();
+  </script>
+</body>
+</html>
