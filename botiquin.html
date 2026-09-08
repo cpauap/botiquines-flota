@@ -36,6 +36,13 @@
     <br><br>
     Base:
     <select id="baseHeli" onchange="cambiarBaseHeli()"></select>
+    <br><br>
+    Fecha de creación/firma del botiquín:
+    <input type="date" id="fechaOrigen" onchange="cambiarFechaOrigen()">
+    <br><br>
+    Observaciones:
+    <br>
+    <textarea id="observaciones" rows="3" style="width: 100%;" onchange="cambiarObservaciones()"></textarea>
   </div>
 
   <div id="documentosSeccion" class="tarjeta">
@@ -66,6 +73,7 @@
     <input type="number" id="cantidad" placeholder="Cantidad" value="1" min="1">
     <input type="text" id="nota" placeholder="Nota (motivo del reemplazo, opcional)" style="width: 250px;">
     <button id="btnGuardar" onclick="añadirItem()">Guardar</button>
+    <button id="btnCancelar" onclick="cancelarFormulario()" style="display:none;">Cancelar</button>
   </div>
   </div>
   </div>
@@ -79,6 +87,7 @@
     const helicopteroId = params.get("helicoptero");
     let botiquinId = null;
     let reemplazandoId = null;
+    let editandoId = null;
     let loteSeleccionadoId = null;
 
     function claseSemaforo(item) {
@@ -220,7 +229,7 @@
     async function obtenerOCrearBotiquin() {
       let { data } = await client
         .from("botiquines")
-        .select("id")
+        .select("id, fecha_origen")
         .eq("helicoptero_id", helicopteroId)
         .maybeSingle();
 
@@ -228,10 +237,12 @@
         const { data: nuevo } = await client
           .from("botiquines")
           .insert({ helicoptero_id: helicopteroId })
-          .select("id")
+          .select("id, fecha_origen")
           .single();
         data = nuevo;
       }
+
+      document.getElementById("fechaOrigen").value = data.fecha_origen || "";
       return data.id;
     }
 
@@ -244,11 +255,12 @@
     async function cargarItems() {
       const { data: heli } = await client
         .from("helicopteros")
-        .select("nombre, estado, foto_url, base_id")
+        .select("nombre, estado, foto_url, base_id, observaciones")
         .eq("id", helicopteroId)
         .single();
       document.getElementById("tituloHeli").innerText = "Botiquín - " + heli.nombre;
       document.getElementById("estadoHeli").value = heli.estado;
+      document.getElementById("observaciones").value = heli.observaciones || "";
       if (heli.foto_url) {
         document.getElementById("fotoActual").src = heli.foto_url;
         document.getElementById("fotoActual").style.display = "inline";
@@ -286,7 +298,10 @@
           <td>${item.modelo || ""}</td>
           <td>${valorCol}</td>
           <td>${item.estado}</td>
-          <td><button onclick="prepararReemplazo('${item.id}')">Reemplazar</button></td>`;
+          <td>
+            <button onclick="prepararEdicion('${item.id}')">Editar</button>
+            <button onclick="prepararReemplazo('${item.id}')">Reemplazar</button>
+          </td>`;
         filas.appendChild(tr);
       });
     }
@@ -379,10 +394,70 @@
         .eq("id", helicopteroId);
     }
 
+    async function cambiarObservaciones() {
+      const texto = document.getElementById("observaciones").value;
+      await client.from("helicopteros")
+        .update({ observaciones: texto })
+        .eq("id", helicopteroId);
+    }
+
+    async function cambiarFechaOrigen() {
+      const fecha = document.getElementById("fechaOrigen").value;
+      await client.from("botiquines")
+        .update({ fecha_origen: fecha || null })
+        .eq("id", botiquinId);
+    }
+
     function prepararReemplazo(itemId) {
       reemplazandoId = itemId;
+      editandoId = null;
       document.getElementById("btnGuardar").innerText = "Guardar reemplazo";
+      document.getElementById("btnCancelar").style.display = "inline";
       document.getElementById("formAlta").scrollIntoView({ behavior: "smooth" });
+    }
+
+    async function prepararEdicion(itemId) {
+      const { data: item } = await client.from("items").select("*").eq("id", itemId).single();
+
+      editandoId = itemId;
+      reemplazandoId = null;
+      loteSeleccionadoId = null;
+
+      document.getElementById("categoria_id").value = item.categoria_id;
+      await cargarProductosCatalogo();
+      document.getElementById("loteAlmacen").value = "";
+      document.getElementById("producto_catalogo").value = "otro";
+      seleccionarProductoCatalogo();
+
+      document.getElementById("marca").value = item.marca;
+      document.getElementById("modelo").value = item.modelo || "";
+      document.getElementById("caduca").checked = item.caduca;
+      toggleCaduca();
+      document.getElementById("fecha_caducidad").value = item.fecha_caducidad || "";
+      document.getElementById("cantidad").value = item.cantidad;
+      document.getElementById("nota").value = "";
+
+      document.getElementById("btnGuardar").innerText = "Guardar edición";
+      document.getElementById("btnCancelar").style.display = "inline";
+      document.getElementById("formAlta").scrollIntoView({ behavior: "smooth" });
+    }
+
+    function cancelarFormulario() {
+      reemplazandoId = null;
+      editandoId = null;
+      loteSeleccionadoId = null;
+      document.getElementById("btnGuardar").innerText = "Guardar";
+      document.getElementById("btnCancelar").style.display = "none";
+      document.getElementById("marca").value = "";
+      document.getElementById("modelo").value = "";
+      document.getElementById("marca").disabled = false;
+      document.getElementById("modelo").disabled = false;
+      document.getElementById("fecha_caducidad").disabled = false;
+      document.getElementById("caduca").checked = true;
+      toggleCaduca();
+      document.getElementById("fecha_caducidad").value = "";
+      document.getElementById("cantidad").value = "1";
+      document.getElementById("nota").value = "";
     }
 
     async function añadirItem() {
@@ -396,6 +471,27 @@
 
       if (!categoria_id || !marca || (caduca && !fecha_caducidad)) {
         alert("Rellena al menos categoría, marca, y la fecha de caducidad si el producto caduca.");
+        return;
+      }
+
+      if (editandoId) {
+        await client.from("items").update({
+          categoria_id,
+          marca,
+          modelo,
+          caduca,
+          fecha_caducidad: caduca ? fecha_caducidad : null,
+          cantidad
+        }).eq("id", editandoId);
+
+        editandoId = null;
+        document.getElementById("btnGuardar").innerText = "Guardar";
+        document.getElementById("btnCancelar").style.display = "none";
+        document.getElementById("marca").value = "";
+        document.getElementById("modelo").value = "";
+        document.getElementById("fecha_caducidad").value = "";
+        document.getElementById("cantidad").value = "1";
+        cargarItems();
         return;
       }
 
@@ -434,6 +530,7 @@
 
       reemplazandoId = null;
       document.getElementById("btnGuardar").innerText = "Guardar";
+      document.getElementById("btnCancelar").style.display = "none";
       document.getElementById("caduca").checked = true;
       toggleCaduca();
       document.getElementById("marca").disabled = false;
