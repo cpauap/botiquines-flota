@@ -122,43 +122,62 @@
     }
 
     function generarPDF() {
-      const anchoCols = ["auto"].concat(helicopteros.map(() => "*"));
+      const TAMANO_BLOQUE = 10;
+      const bloques = [];
+      for (let i = 0; i < helicopteros.length; i += TAMANO_BLOQUE) {
+        bloques.push(helicopteros.slice(i, i + TAMANO_BLOQUE));
+      }
 
-      const filaCabecera = [{ text: "Categoría", bold: true, fillColor: "#0B2E4F", color: "white" }]
-        .concat(helicopteros.map(h => ({ text: h.nombre, bold: true, fillColor: "#0B2E4F", color: "white" })));
+      const contenido = [
+        { text: "Resumen de la flota - Botiquines", fontSize: 14, bold: true, margin: [0, 0, 0, 10] }
+      ];
 
-      const cuerpo = [filaCabecera];
+      bloques.forEach((bloque, indiceBloque) => {
+        const anchoCols = ["auto"].concat(bloque.map(() => "*"));
 
-      categorias.forEach(cat => {
-        const fila = [{ text: cat.nombre, bold: true }];
+        const filaCabecera = [{ text: "Categoría", bold: true, fillColor: "#0B2E4F", color: "white" }]
+          .concat(bloque.map(h => ({ text: h.nombre, bold: true, fillColor: "#0B2E4F", color: "white" })));
 
-        helicopteros.forEach(h => {
-          const items = mapaItems[cat.id + "|" + h.id] || [];
-          if (items.length === 0) {
-            fila.push({ text: "" });
-            return;
-          }
+        const cuerpo = [filaCabecera];
 
-          const spans = [];
-          items.forEach((item, i) => {
-            const estado = estadoItem(item);
-            const color = estado === "rojo" ? "#F8D7DA" : (estado === "amarillo" ? "#FFF176" : undefined);
-            spans.push({ text: textoItem(item) + (i < items.length - 1 ? "\n" : ""), fillColor: color });
+        categorias.forEach(cat => {
+          const fila = [{ text: cat.nombre, bold: true }];
+
+          bloque.forEach(h => {
+            const items = mapaItems[cat.id + "|" + h.id] || [];
+            if (items.length === 0) {
+              fila.push({ text: "" });
+              return;
+            }
+
+            const spans = [];
+            items.forEach((item, i) => {
+              const estado = estadoItem(item);
+              const color = estado === "rojo" ? "#C0392B" : (estado === "amarillo" ? "#B8860B" : undefined);
+              const negrita = estado !== "";
+              spans.push({
+                text: textoItem(item) + (i < items.length - 1 ? "\n" : ""),
+                color: color,
+                bold: negrita
+              });
+            });
+            fila.push({ text: spans });
           });
-          fila.push({ text: spans });
+
+          cuerpo.push(fila);
         });
 
-        cuerpo.push(fila);
+        contenido.push({
+          table: { headerRows: 1, widths: anchoCols, body: cuerpo },
+          pageBreak: indiceBloque < bloques.length - 1 ? "after" : undefined
+        });
       });
 
       const docDefinition = {
         pageOrientation: "landscape",
         pageMargins: [20, 20, 20, 20],
-        content: [
-          { text: "Resumen de la flota - Botiquines", fontSize: 14, bold: true, margin: [0, 0, 0, 10] },
-          { table: { headerRows: 1, widths: anchoCols, body: cuerpo } }
-        ],
-        defaultStyle: { fontSize: 7 }
+        content: contenido,
+        defaultStyle: { fontSize: 8 }
       };
 
       pdfMake.createPdf(docDefinition).download("Resumen_flota_botiquines.pdf");
