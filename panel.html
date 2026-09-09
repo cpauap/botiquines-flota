@@ -94,7 +94,7 @@
           const miniatura = h.foto_url
             ? `<img src="${h.foto_url}" style="height:30px;width:30px;object-fit:cover;border-radius:4px;margin-right:8px;vertical-align:middle;">`
             : "";
-          fila.innerHTML = `<span>${miniatura}${h.nombre}</span><span class="${estadoClase}">${h.estado}</span>`;
+          fila.innerHTML = `<span>${miniatura}${h.nombre}</span><span><span class="${estadoClase}">${h.estado}</span> <button onclick="event.stopPropagation(); eliminarHelicoptero('${h.id}', '${h.nombre}')">Eliminar</button></span>`;
           fila.style.cursor = "pointer";
           fila.onclick = () => window.location.href = `botiquin.html?helicoptero=${h.id}`;
           grupo.appendChild(fila);
@@ -102,6 +102,12 @@
 
         contenedor.appendChild(grupo);
       });
+    }
+
+    async function eliminarHelicoptero(id, nombre) {
+      if (!confirm(`¿Eliminar "${nombre}" de forma permanente? Se borrarán también su botiquín, productos, documentos y fotos asociadas. Esto NO se puede deshacer.`)) return;
+      await client.from("helicopteros").delete().eq("id", id);
+      cargarPanel();
     }
 
     async function crearHelicoptero() {
