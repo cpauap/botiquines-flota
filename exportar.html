@@ -77,6 +77,12 @@
       return { nombreHeli: heli.nombre, categorias, items };
     }
 
+    function formatearFecha(fechaISO) {
+      if (!fechaISO) return "";
+      const [anio, mes, dia] = fechaISO.split("-");
+      return `${dia}/${mes}/${anio}`;
+    }
+
     function idsQueCaducanAntesGlobal(items) {
       const conFecha = items.filter(i => i.caduca && i.fecha_caducidad);
       if (conFecha.length === 0) return new Set();
@@ -111,7 +117,8 @@
             children: [new TextRun({
               text: texto || "",
               bold: opciones.bold || false,
-              underline: opciones.subrayado ? { type: UnderlineType.SINGLE } : undefined
+              underline: opciones.subrayado ? { type: UnderlineType.SINGLE } : undefined,
+              size: 24
             })]
           })]
         });
@@ -155,7 +162,7 @@
 
           if (item) {
             const producto = [item.marca, item.modelo].filter(Boolean).join(" ");
-            const valorCol3 = item.caduca ? (item.fecha_caducidad || "") : (item.cantidad + " u");
+            const valorCol3 = item.caduca ? formatearFecha(item.fecha_caducidad) : (item.cantidad + " u");
             const subrayar = idsMasProximo.has(item.id);
             fila.push(celda(producto, anchoCol[1], { subrayado: subrayar }));
             fila.push(celda(valorCol3, anchoCol[2], { centrado: true, subrayado: subrayar }));
@@ -188,11 +195,11 @@
             new Paragraph({ text: "" }),
             new Paragraph({
               alignment: AlignmentType.CENTER,
-              children: [new TextRun({ text: `Madrid-Cuatro Vientos, a ${formatearFechaLarga(fechaEmision)}` })]
+              children: [new TextRun({ text: `Madrid-Cuatro Vientos, a ${formatearFechaLarga(fechaEmision)}`, size: 24 })]
             }),
             new Paragraph({
               alignment: AlignmentType.CENTER,
-              children: [new TextRun({ text: "EL RESPONSABLE DE LA AERONAVEGABILIDAD ES.CAO.027", bold: true })]
+              children: [new TextRun({ text: "EL RESPONSABLE DE LA AERONAVEGABILIDAD ES.CAO.027", bold: true, size: 24 })]
             })
           ]
         }]
@@ -243,7 +250,7 @@
 
           if (item) {
             const producto = [item.marca, item.modelo].filter(Boolean).join(" ");
-            const valorCol3 = item.caduca ? (item.fecha_caducidad || "") : (item.cantidad + " u");
+            const valorCol3 = item.caduca ? formatearFecha(item.fecha_caducidad) : (item.cantidad + " u");
             const subrayar = idsMasProximo.has(item.id) ? "underline" : undefined;
             fila.push({ text: producto, decoration: subrayar });
             fila.push({ text: valorCol3, alignment: "center", decoration: subrayar });
@@ -267,7 +274,7 @@
           { text: `Madrid-Cuatro Vientos, a ${formatearFechaLarga(fechaEmision)}`, alignment: "center" },
           { text: "EL RESPONSABLE DE LA AERONAVEGABILIDAD ES.CAO.027", alignment: "center", bold: true }
         ],
-        defaultStyle: { fontSize: 9 }
+        defaultStyle: { fontSize: 11 }
       };
 
       pdfMake.createPdf(docDefinition).download(`Botiquin_${nombreHeli}.pdf`);
