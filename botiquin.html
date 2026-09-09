@@ -90,6 +90,12 @@
     let editandoId = null;
     let loteSeleccionadoId = null;
 
+    function formatearFecha(fechaISO) {
+      if (!fechaISO) return "";
+      const [anio, mes, dia] = fechaISO.split("-");
+      return `${dia}/${mes}/${anio}`;
+    }
+
     function claseSemaforo(item) {
       if (!item.caduca || !item.fecha_caducidad) return "";
       const hoy = new Date();
@@ -147,7 +153,7 @@
         opt.dataset.marca = l.marca;
         opt.dataset.modelo = l.modelo || "";
         opt.dataset.caducidad = l.fecha_caducidad;
-        opt.innerText = `${[l.marca, l.modelo].filter(Boolean).join(" ")} · cad. ${l.fecha_caducidad} · ${l.cantidad} u`;
+        opt.innerText = `${[l.marca, l.modelo].filter(Boolean).join(" ")} · cad. ${formatearFecha(l.fecha_caducidad)} · ${l.cantidad} u`;
         select.appendChild(opt);
       });
     }
@@ -291,7 +297,7 @@
       items.forEach(item => {
         const tr = document.createElement("tr");
         tr.className = claseSemaforo(item);
-        const valorCol = item.caduca ? (item.fecha_caducidad || "") : (item.cantidad + " u");
+        const valorCol = item.caduca ? formatearFecha(item.fecha_caducidad) : (item.cantidad + " u");
         tr.innerHTML = `
           <td>${item.categorias_producto?.nombre || ""}</td>
           <td>${item.marca}</td>
@@ -301,6 +307,7 @@
           <td>
             <button onclick="prepararEdicion('${item.id}')">Editar</button>
             <button onclick="prepararReemplazo('${item.id}')">Reemplazar</button>
+            <button onclick="eliminarItem('${item.id}')">Eliminar</button>
           </td>`;
         filas.appendChild(tr);
       });
@@ -406,6 +413,14 @@
       await client.from("botiquines")
         .update({ fecha_origen: fecha || null })
         .eq("id", botiquinId);
+    }
+
+    async function eliminarItem(itemId) {
+      if (!confirm("¿Retirar este producto del botiquín? Quedará en el histórico, no se borra del todo.")) return;
+      await client.from("items")
+        .update({ estado: "retirado" })
+        .eq("id", itemId);
+      cargarItems();
     }
 
     function prepararReemplazo(itemId) {
