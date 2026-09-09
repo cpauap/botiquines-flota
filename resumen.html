@@ -8,8 +8,14 @@
 <script src="pdfmake.min.js"></script>
 <script src="vfs_fonts.js"></script>
 <style>
-  table { width: 100%; border-collapse: collapse; }
-  .amarillo-proximo { background-color: #FFF176 !important; }
+  table { border-collapse: collapse; }
+  th, td { border: 1px solid var(--gris-borde); padding: 6px 8px; vertical-align: top; font-size: 13px; }
+  th { background-color: var(--azul-marino); color: var(--blanco); position: sticky; top: 0; }
+  .celda-categoria { font-weight: 600; background: #f4f8fb; white-space: nowrap; }
+  .item-linea { padding: 2px 4px; margin-bottom: 2px; border-radius: 3px; }
+  .item-rojo { background-color: #F8D7DA; }
+  .item-amarillo { background-color: #FFF176; }
+  .tabla-scroll { overflow-x: auto; }
 </style>
 </head>
 <body>
@@ -20,14 +26,9 @@
       <button onclick="window.location.href='panel.html'">← Panel</button>
     </div>
   </div>
-  <div class="contenedor">
-  <div class="tarjeta">
-    <table>
-      <thead>
-        <tr><th>Base</th><th>Helicóptero</th><th>Categoría</th><th>Marca</th><th>Modelo</th><th>Caducidad / Cantidad</th></tr>
-      </thead>
-      <tbody id="filasResumen"></tbody>
-    </table>
+  <div class="contenedor" style="max-width: none;">
+  <div class="tarjeta tabla-scroll">
+    <table id="tablaResumen"></table>
   </div>
   </div>
 
@@ -36,7 +37,10 @@
     const SUPABASE_KEY = "sb_publishable_f3F70B-1EnU3aRpQaFu7_A_szShexxl";
     const client = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
-    let filasCalculadas = [];
+    const UMBRAL_DIAS = 90;
+    let categorias = [];
+    let helicopteros = [];
+    let mapaItems = {};
 
     function formatearFecha(fechaISO) {
       if (!fechaISO) return "";
@@ -44,119 +48,128 @@
       return `${dia}/${mes}/${anio}`;
     }
 
-    async function obtenerDatosFlota() {
-      const { data: bases } = await client.from("bases").select("id, nombre");
-      const { data: helicopteros } = await client.from("helicopteros").select("id, nombre, base_id");
-      const { data: botiquines } = await client.from("botiquines").select("id, helicoptero_id");
-      const { data: categorias } = await client.from("categorias_producto").select("id, nombre");
-      const { data: items } = await client
-        .from("items")
-        .select("*")
-        .eq("estado", "activo");
-
-      const mapaBases = Object.fromEntries(bases.map(b => [b.id, b.nombre]));
-      const mapaHelis = Object.fromEntries(helicopteros.map(h => [h.id, h]));
-      const mapaBotiquines = Object.fromEntries(botiquines.map(b => [b.id, b.helicoptero_id]));
-      const mapaCategorias = Object.fromEntries(categorias.map(c => [c.id, c.nombre]));
-
-      const filas = items.map(item => {
-        const helicopteroId = mapaBotiquines[item.botiquin_id];
-        const heli = mapaHelis[helicopteroId] || {};
-        return {
-          base: mapaBases[heli.base_id] || "",
-          helicoptero: heli.nombre || "",
-          categoria: mapaCategorias[item.categoria_id] || "",
-          marca: item.marca,
-          modelo: item.modelo || "",
-          caduca: item.caduca,
-          fecha_caducidad: item.fecha_caducidad,
-          cantidad: item.cantidad
-        };
-      });
-
-      return filas;
-    }
-
-    function calcularEstados(filas) {
+    function estadoItem(item) {
+      if (!item.caduca || !item.fecha_caducidad) return "";
       const hoy = new Date().toISOString().split("T")[0];
-
-      filas.forEach(f => {
-        f.expirado = f.caduca && f.fecha_caducidad && f.fecha_caducidad < hoy;
-      });
-
-      const noExpirados = filas.filter(f => f.caduca && f.fecha_caducidad && !f.expirado);
-      if (noExpirados.length > 0) {
-        const minFecha = noExpirados.reduce((min, f) => f.fecha_caducidad < min ? f.fecha_caducidad : min, noExpirados[0].fecha_caducidad);
-        filas.forEach(f => { f.esProximo = !f.expirado && f.caduca && f.fecha_caducidad === minFecha; });
-      }
-
-      filas.sort((a, b) => {
-        if (!a.fecha_caducidad) return 1;
-        if (!b.fecha_caducidad) return -1;
-        return a.fecha_caducidad < b.fecha_caducidad ? -1 : 1;
-      });
-
-      return filas;
+      const dias = Math.floor((new Date(item.fecha_caducidad) - new Date(hoy)) / (1000 * 60 * 60 * 24));
+      if (dias < 0) return "rojo";
+      if (dias <= UMBRAL_DIAS) return "amarillo";
+      return "";
     }
 
-    async function cargarResumen() {
-      const filas = calcularEstados(await obtenerDatosFlota());
-      filasCalculadas = filas;
+    async function obtenerDatos() {
+      const { data: cats } = await client.from("categorias_producto").select("id, nombre").order("orden");
+      categorias = cats;
 
-      const tbody = document.getElementById("filasResumen");
-      tbody.innerHTML = "";
+      const { data: helis } = await client.from("helicopteros").select("id, nombre").order("nombre");
+      helicopteros = helis;
 
-      filas.forEach(f => {
+      const { data: botiquines } = await client.from("botiquines").select("id, helicoptero_id");
+      const mapaBotiquines = Object.fromEntries(botiquines.map(b => [b.id, b.helicoptero_id]));
+
+      const { data: items } = await client.from("items").select("*").eq("estado", "activo");
+
+      mapaItems = {};
+      items.forEach(item => {
+        const helicopteroId = mapaBotiquines[item.botiquin_id];
+        if (!helicopteroId) return;
+        const clave = item.categoria_id + "|" + helicopteroId;
+        if (!mapaItems[clave]) mapaItems[clave] = [];
+        mapaItems[clave].push(item);
+      });
+    }
+
+    function textoItem(item) {
+      const producto = [item.marca, item.modelo].filter(Boolean).join(" ");
+      const cantidadTxt = `(${item.cantidad} u)`;
+      const fechaTxt = item.caduca ? " - " + formatearFecha(item.fecha_caducidad) : "";
+      return `${producto} ${cantidadTxt}${fechaTxt}`;
+    }
+
+    function renderTablaHTML() {
+      const tabla = document.getElementById("tablaResumen");
+      tabla.innerHTML = "";
+
+      const thead = document.createElement("thead");
+      const trCab = document.createElement("tr");
+      trCab.innerHTML = "<th>Categoría</th>" + helicopteros.map(h => `<th>${h.nombre}</th>`).join("");
+      thead.appendChild(trCab);
+      tabla.appendChild(thead);
+
+      const tbody = document.createElement("tbody");
+      categorias.forEach(cat => {
         const tr = document.createElement("tr");
-        if (f.expirado) tr.className = "rojo";
-        else if (f.esProximo) tr.className = "amarillo-proximo";
+        let fila = `<td class="celda-categoria">${cat.nombre}</td>`;
 
-        const valorCol = f.caduca ? formatearFecha(f.fecha_caducidad) : (f.cantidad + " u");
-        tr.innerHTML = `
-          <td>${f.base}</td>
-          <td>${f.helicoptero}</td>
-          <td>${f.categoria}</td>
-          <td>${f.marca}</td>
-          <td>${f.modelo} (${f.cantidad} u)</td>
-          <td>${valorCol}</td>`;
+        helicopteros.forEach(h => {
+          const items = mapaItems[cat.id + "|" + h.id] || [];
+          if (items.length === 0) {
+            fila += "<td></td>";
+          } else {
+            const lineas = items.map(item => {
+              const estado = estadoItem(item);
+              const clase = estado === "rojo" ? "item-rojo" : (estado === "amarillo" ? "item-amarillo" : "");
+              return `<div class="item-linea ${clase}">${textoItem(item)}</div>`;
+            }).join("");
+            fila += `<td>${lineas}</td>`;
+          }
+        });
+
+        tr.innerHTML = fila;
         tbody.appendChild(tr);
       });
+      tabla.appendChild(tbody);
     }
 
     function generarPDF() {
-      const cuerpo = [
-        [
-          { text: "Base", bold: true },
-          { text: "Helicóptero", bold: true },
-          { text: "Categoría", bold: true },
-          { text: "Marca", bold: true },
-          { text: "Modelo", bold: true },
-          { text: "Caducidad/Cantidad", bold: true }
-        ]
-      ];
+      const anchoCols = ["auto"].concat(helicopteros.map(() => "*"));
 
-      filasCalculadas.forEach(f => {
-        const valorCol = f.caduca ? formatearFecha(f.fecha_caducidad) : (f.cantidad + " u");
-        const color = f.expirado ? "#F8D7DA" : (f.esProximo ? "#FFF176" : undefined);
-        const fila = [f.base, f.helicoptero, f.categoria, f.marca, `${f.modelo} (${f.cantidad} u)`, valorCol]
-          .map(texto => ({ text: texto, fillColor: color }));
+      const filaCabecera = [{ text: "Categoría", bold: true, fillColor: "#0B2E4F", color: "white" }]
+        .concat(helicopteros.map(h => ({ text: h.nombre, bold: true, fillColor: "#0B2E4F", color: "white" })));
+
+      const cuerpo = [filaCabecera];
+
+      categorias.forEach(cat => {
+        const fila = [{ text: cat.nombre, bold: true }];
+
+        helicopteros.forEach(h => {
+          const items = mapaItems[cat.id + "|" + h.id] || [];
+          if (items.length === 0) {
+            fila.push({ text: "" });
+            return;
+          }
+
+          const spans = [];
+          items.forEach((item, i) => {
+            const estado = estadoItem(item);
+            const color = estado === "rojo" ? "#F8D7DA" : (estado === "amarillo" ? "#FFF176" : undefined);
+            spans.push({ text: textoItem(item) + (i < items.length - 1 ? "\n" : ""), fillColor: color });
+          });
+          fila.push({ text: spans });
+        });
+
         cuerpo.push(fila);
       });
 
       const docDefinition = {
         pageOrientation: "landscape",
-        pageMargins: [30, 30, 30, 30],
+        pageMargins: [20, 20, 20, 20],
         content: [
           { text: "Resumen de la flota - Botiquines", fontSize: 14, bold: true, margin: [0, 0, 0, 10] },
-          { table: { headerRows: 1, widths: ["auto", "auto", "*", "*", "*", "auto"], body: cuerpo } }
+          { table: { headerRows: 1, widths: anchoCols, body: cuerpo } }
         ],
-        defaultStyle: { fontSize: 8 }
+        defaultStyle: { fontSize: 7 }
       };
 
       pdfMake.createPdf(docDefinition).download("Resumen_flota_botiquines.pdf");
     }
 
-    cargarResumen();
+    async function iniciar() {
+      await obtenerDatos();
+      renderTablaHTML();
+    }
+
+    iniciar();
   </script>
 </body>
 </html>
