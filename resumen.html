@@ -38,6 +38,12 @@
 
     let filasCalculadas = [];
 
+    function formatearFecha(fechaISO) {
+      if (!fechaISO) return "";
+      const [anio, mes, dia] = fechaISO.split("-");
+      return `${dia}/${mes}/${anio}`;
+    }
+
     async function obtenerDatosFlota() {
       const { data: bases } = await client.from("bases").select("id, nombre");
       const { data: helicopteros } = await client.from("helicopteros").select("id, nombre, base_id");
@@ -105,13 +111,13 @@
         if (f.expirado) tr.className = "rojo";
         else if (f.esProximo) tr.className = "amarillo-proximo";
 
-        const valorCol = f.caduca ? (f.fecha_caducidad || "") : (f.cantidad + " u");
+        const valorCol = f.caduca ? formatearFecha(f.fecha_caducidad) : (f.cantidad + " u");
         tr.innerHTML = `
           <td>${f.base}</td>
           <td>${f.helicoptero}</td>
           <td>${f.categoria}</td>
           <td>${f.marca}</td>
-          <td>${f.modelo}</td>
+          <td>${f.modelo} (${f.cantidad} u)</td>
           <td>${valorCol}</td>`;
         tbody.appendChild(tr);
       });
@@ -130,9 +136,9 @@
       ];
 
       filasCalculadas.forEach(f => {
-        const valorCol = f.caduca ? (f.fecha_caducidad || "") : (f.cantidad + " u");
+        const valorCol = f.caduca ? formatearFecha(f.fecha_caducidad) : (f.cantidad + " u");
         const color = f.expirado ? "#F8D7DA" : (f.esProximo ? "#FFF176" : undefined);
-        const fila = [f.base, f.helicoptero, f.categoria, f.marca, f.modelo, valorCol]
+        const fila = [f.base, f.helicoptero, f.categoria, f.marca, `${f.modelo} (${f.cantidad} u)`, valorCol]
           .map(texto => ({ text: texto, fillColor: color }));
         cuerpo.push(fila);
       });
