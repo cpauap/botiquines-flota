@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>Histórico de material</title>
+<link rel="stylesheet" href="estilo.css">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+  section.tarjeta { margin-bottom: 20px; }
+</style>
+</head>
+<body>
+  <div class="barra-superior">
+    <h1 id="titulo">Cargando...</h1>
+    <button onclick="volver()">← Volver</button>
+  </div>
+  <div class="contenedor">
+
+  <section class="tarjeta">
+    <h3>Unidades reemplazadas o retiradas</h3>
+    <table>
+      <thead><tr><th>Categoría</th><th>Marca</th><th>Modelo</th><th>Nº Serie</th><th>Caducidad</th><th>Estado</th><th>Nota</th></tr></thead>
+      <tbody id="filasHistorico"></tbody>
+    </table>
+  </section>
+
+  <section class="tarjeta">
+    <h3>Consultar estado en una fecha concreta</h3>
+    <input type="date" id="fechaConsulta">
+    <button onclick="consultarFecha()">Consultar</button>
+    <table>
+      <thead><tr><th>Categoría</th><th>Marca</th><th>Modelo</th><th>Nº Serie</th><th>Caducidad</th><th>Estado en esa fecha</th></tr></thead>
+      <tbody id="filasConsulta"></tbody>
+    </table>
+  </section>
+  </div>
+
+  <script>
+    const SUPABASE_URL = "https://pfyvliaknlpuawuppsko.supabase.co";
+    const SUPABASE_KEY = "sb_publishable_f3F70B-1EnU3aRpQaFu7_A_szShexxl";
+    const client = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+    const params = new URLSearchParams(window.location.search);
+    const baseId = params.get("base");
+    let mapaCategorias = {};
+
+    function formatearFecha(fechaISO) {
+      if (!fechaISO) return "";
+      const [anio, mes, dia] = fechaISO.split("-");
+      return `${dia}/${mes}/${anio}`;
+    }
+
+    function volver() {
+      window.location.href = "material.html";
+    }
+
+    async function cargarMapaCategorias() {
+      const { data: categorias } = await client.from("categorias_material").select("id, nombre");
+      categorias.forEach(c => { mapaCategorias[c.id] = c.nombre; });
+    }
+
+    async function cargarCabecera() {
+      await cargarMapaCategorias();
+      const { data: base } = await client.from("bases").select("nombre").eq("id", baseId).single();
+      document.getElementById("titulo").innerText = "Histórico de material - " + base.nombre;
+      cargarHistorico();
+    }
+
+    async function cargarHistorico() {
+      const { data: unidades } = await client
+        .from("material_seguridad")
+        .select("*")
+        .eq("base_id", baseId)
+        .neq("estado", "activo")
+        .order("creado_en", { ascending: false });
+
+      const filas = document.getElementById("filasHistorico");
+      filas.innerHTML = "";
+      unidades.forEach(u => {
+        const tr = document.createElement("tr");
+        tr.innerHTML = `<td>${mapaCategorias[u.categoria_id] || ""}</td><td>${u.marca}</td><td>${u.modelo || ""}</td><td>${u.numero_serie || ""}</td><td>${formatearFecha(u.fecha_caducidad)}</td><td>${u.estado}</td><td>${u.nota || ""}</td>`;
+        filas.appendChild(tr);
+      });
+    }
+
+    async function consultarFecha() {
+      const fecha = document.getElementById("fechaConsulta").value;
+      if (!fecha) { alert("Elige una fecha."); return; }
+      const fechaLimite = fecha + "T23:59:59";
+
+      const { data: logs } = await client
+        .from("audit_log")
+        .select("*")
+        .eq("tabla", "material_seguridad")
+        .lte("creado_en", fechaLimite)
+        .order("creado_en", { ascending: true });
+
+      const relevantes = logs.filter(l => {
+        const nuevo = l.datos_nuevos;
+        const anterior = l.datos_anteriores;
+        return (nuevo && nuevo.base_id === baseId) || (anterior && anterior.base_id === baseId);
+      });
+
+      const ultimoPorUnidad = {};
+      relevantes.forEach(l => { ultimoPorUnidad[l.registro_id] = l; });
+
+      const filas = document.getElementById("filasConsulta");
+      filas.innerHTML = "";
+      Object.values(ultimoPorUnidad).forEach(l => {
+        const u = l.datos_nuevos;
+        if (!u) return;
+        const tr = document.createElement("tr");
+        tr.innerHTML = `<td>${mapaCategorias[u.categoria_id] || ""}</td><td>${u.marca}</td><td>${u.modelo || ""}</td><td>${u.numero_serie || ""}</td><td>${formatearFecha(u.fecha_caducidad)}</td><td>${u.estado}</td>`;
+        filas.appendChild(tr);
+      });
+
+      if (Object.keys(ultimoPorUnidad).length === 0) {
+        filas.innerHTML = "<tr><td colspan='6'>No hay datos registrados hasta esa fecha.</td></tr>";
+      }
+    }
+
+    cargarCabecera();
+  </script>
+</body>
+</html>
