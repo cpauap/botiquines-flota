@@ -166,10 +166,10 @@
       if (esPorBase) {
         if (!baseSeleccionadaId) { cabecera.innerHTML = ""; return; }
         query = query.eq("base_id", baseSeleccionadaId);
-        cabecera.innerHTML = "<tr><th>Categoría</th><th>Marca</th><th>Modelo</th><th>Nº Serie</th><th>Caducidad</th><th>Acción</th></tr>";
+        cabecera.innerHTML = "<tr><th>Categoría</th><th>Marca</th><th>Modelo</th><th>Nº Serie</th><th>Caducidad</th><th>Acción</th><th>Mover a</th></tr>";
       } else {
         query = query.eq("categoria_id", pestañaActual);
-        cabecera.innerHTML = "<tr><th>Base</th><th>Marca</th><th>Modelo</th><th>Nº Serie</th><th>Caducidad</th><th>Acción</th></tr>";
+        cabecera.innerHTML = "<tr><th>Base</th><th>Marca</th><th>Modelo</th><th>Nº Serie</th><th>Caducidad</th><th>Acción</th><th>Mover a</th></tr>";
       }
 
       const { data: unidades } = await query.order("fecha_caducidad");
@@ -181,6 +181,7 @@
         const tr = document.createElement("tr");
         tr.className = claseSemaforo(u.fecha_caducidad);
         const primeraCol = esPorBase ? (mapaCategorias[u.categoria_id] || "") : (mapaBases[u.base_id] || "");
+        const opcionesBases = bases.map(b => `<option value="${b.id}" ${b.id === u.base_id ? "selected" : ""}>${b.nombre}</option>`).join("");
         tr.innerHTML = `
           <td>${primeraCol}</td>
           <td>${u.marca}</td>
@@ -191,6 +192,10 @@
             <button onclick="prepararEdicion('${u.id}')">Editar</button>
             <button onclick="prepararReemplazo('${u.id}')">Reemplazar</button>
             <button onclick="retirarUnidad('${u.id}')">Retirar</button>
+          </td>
+          <td>
+            <select id="mover-${u.id}">${opcionesBases}</select>
+            <button onclick="moverUnidad('${u.id}')">Mover</button>
           </td>`;
         filas.appendChild(tr);
       });
@@ -260,6 +265,12 @@
       document.getElementById("btnGuardar").innerText = "Guardar reemplazo";
       document.getElementById("btnCancelar").style.display = "inline";
       document.getElementById("formAlta").scrollIntoView({ behavior: "smooth" });
+    }
+
+    async function moverUnidad(id) {
+      const nuevaBase = document.getElementById("mover-" + id).value;
+      await client.from("material_seguridad").update({ base_id: nuevaBase }).eq("id", id);
+      cargarTabla();
     }
 
     async function retirarUnidad(id) {
