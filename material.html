@@ -1,0 +1,289 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>Material de supervivencia</title>
+<link rel="stylesheet" href="estilo.css">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+  .pestañas { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 15px; }
+  .pestaña { padding: 8px 14px; border-radius: 6px 6px 0 0; background: var(--gris-borde); cursor: pointer; font-size: 14px; }
+  .pestaña.activa { background: var(--azul-marino); color: var(--blanco); font-weight: 600; }
+  table { width: 100%; }
+  #formAlta select, #formAlta input { margin: 4px; }
+</style>
+</head>
+<body>
+  <div class="barra-superior">
+    <h1>Material de supervivencia</h1>
+    <div>
+      <button onclick="window.location.href='material-resumen.html'">Resumen</button>
+      <button onclick="window.location.href='inicio.html'">← Inicio</button>
+    </div>
+  </div>
+  <div class="contenedor">
+
+  <div class="pestañas" id="pestañas"></div>
+
+  <div id="selectorBase" class="tarjeta" style="display:none;">
+    Base:
+    <select id="baseSeleccionada" onchange="cambiarBaseSeleccionada()"></select>
+  </div>
+
+  <div class="tarjeta">
+    <table>
+      <thead id="cabeceraTabla"></thead>
+      <tbody id="filasTabla"></tbody>
+    </table>
+  </div>
+
+  <div class="tarjeta" id="formAlta">
+    <h3 id="tituloForm">Añadir unidad</h3>
+    <select id="baseForm" style="display:none;"></select>
+    <select id="categoriaForm" style="display:none;"></select>
+    <input type="text" id="marca" placeholder="Marca">
+    <input type="text" id="modelo" placeholder="Modelo">
+    <input type="text" id="numeroSerie" placeholder="Número de serie">
+    <input type="date" id="fechaCaducidad">
+    <input type="text" id="nota" placeholder="Nota (motivo del reemplazo, opcional)" style="width:220px;">
+    <button id="btnGuardar" onclick="guardar()">Guardar</button>
+    <button id="btnCancelar" onclick="cancelarFormulario()" style="display:none;">Cancelar</button>
+  </div>
+  </div>
+
+  <script>
+    const SUPABASE_URL = "https://pfyvliaknlpuawuppsko.supabase.co";
+    const SUPABASE_KEY = "sb_publishable_f3F70B-1EnU3aRpQaFu7_A_szShexxl";
+    const client = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+    let categorias = [];
+    let bases = [];
+    let pestañaActual = "porBase";
+    let baseSeleccionadaId = null;
+    let editandoId = null;
+    let reemplazandoId = null;
+
+    function formatearFecha(fechaISO) {
+      if (!fechaISO) return "";
+      const [anio, mes, dia] = fechaISO.split("-");
+      return `${dia}/${mes}/${anio}`;
+    }
+
+    function claseSemaforo(fecha) {
+      const hoy = new Date();
+      const cad = new Date(fecha);
+      const dias = Math.floor((cad - hoy) / (1000 * 60 * 60 * 24));
+      if (dias < 0) return "rojo";
+      if (dias <= 45) return dias <= 15 ? "rojo" : "ambar";
+      return "verde";
+    }
+
+    async function cargarDatosBase() {
+      const { data: cats } = await client.from("categorias_material").select("id, nombre").order("orden");
+      categorias = cats;
+      const { data: bs } = await client.from("bases").select("id, nombre").order("nombre");
+      bases = bs;
+
+      const selectBaseForm = document.getElementById("baseForm");
+      selectBaseForm.innerHTML = "";
+      bases.forEach(b => {
+        const opt = document.createElement("option");
+        opt.value = b.id;
+        opt.innerText = b.nombre;
+        selectBaseForm.appendChild(opt);
+      });
+
+      const selectCategoriaForm = document.getElementById("categoriaForm");
+      selectCategoriaForm.innerHTML = "";
+      categorias.forEach(c => {
+        const opt = document.createElement("option");
+        opt.value = c.id;
+        opt.innerText = c.nombre;
+        selectCategoriaForm.appendChild(opt);
+      });
+
+      const selectBase = document.getElementById("baseSeleccionada");
+      selectBase.innerHTML = "";
+      bases.forEach(b => {
+        const opt = document.createElement("option");
+        opt.value = b.id;
+        opt.innerText = b.nombre;
+        selectBase.appendChild(opt);
+      });
+      if (bases.length > 0) baseSeleccionadaId = bases[0].id;
+    }
+
+    function renderPestañas() {
+      const contenedor = document.getElementById("pestañas");
+      contenedor.innerHTML = "";
+
+      const tabPorBase = document.createElement("div");
+      tabPorBase.className = "pestaña" + (pestañaActual === "porBase" ? " activa" : "");
+      tabPorBase.innerText = "Por base";
+      tabPorBase.onclick = () => cambiarPestaña("porBase");
+      contenedor.appendChild(tabPorBase);
+
+      categorias.forEach(c => {
+        const tab = document.createElement("div");
+        tab.className = "pestaña" + (pestañaActual === c.id ? " activa" : "");
+        tab.innerText = c.nombre;
+        tab.onclick = () => cambiarPestaña(c.id);
+        contenedor.appendChild(tab);
+      });
+    }
+
+    function cambiarPestaña(id) {
+      pestañaActual = id;
+      cancelarFormulario();
+      renderPestañas();
+      cargarTabla();
+    }
+
+    function cambiarBaseSeleccionada() {
+      baseSeleccionadaId = document.getElementById("baseSeleccionada").value;
+      cargarTabla();
+    }
+
+    async function cargarTabla() {
+      const esPorBase = pestañaActual === "porBase";
+      document.getElementById("selectorBase").style.display = esPorBase ? "block" : "none";
+      document.getElementById("baseForm").style.display = esPorBase ? "none" : "inline";
+      document.getElementById("categoriaForm").style.display = esPorBase ? "inline" : "none";
+
+      const cabecera = document.getElementById("cabeceraTabla");
+      const filas = document.getElementById("filasTabla");
+      filas.innerHTML = "";
+
+      let query = client.from("material_seguridad").select("*").eq("estado", "activo");
+
+      if (esPorBase) {
+        if (!baseSeleccionadaId) { cabecera.innerHTML = ""; return; }
+        query = query.eq("base_id", baseSeleccionadaId);
+        cabecera.innerHTML = "<tr><th>Categoría</th><th>Marca</th><th>Modelo</th><th>Nº Serie</th><th>Caducidad</th><th>Acción</th></tr>";
+      } else {
+        query = query.eq("categoria_id", pestañaActual);
+        cabecera.innerHTML = "<tr><th>Base</th><th>Marca</th><th>Modelo</th><th>Nº Serie</th><th>Caducidad</th><th>Acción</th></tr>";
+      }
+
+      const { data: unidades } = await query.order("fecha_caducidad");
+
+      const mapaCategorias = Object.fromEntries(categorias.map(c => [c.id, c.nombre]));
+      const mapaBases = Object.fromEntries(bases.map(b => [b.id, b.nombre]));
+
+      unidades.forEach(u => {
+        const tr = document.createElement("tr");
+        tr.className = claseSemaforo(u.fecha_caducidad);
+        const primeraCol = esPorBase ? (mapaCategorias[u.categoria_id] || "") : (mapaBases[u.base_id] || "");
+        tr.innerHTML = `
+          <td>${primeraCol}</td>
+          <td>${u.marca}</td>
+          <td>${u.modelo || ""}</td>
+          <td>${u.numero_serie || ""}</td>
+          <td>${formatearFecha(u.fecha_caducidad)}</td>
+          <td>
+            <button onclick="prepararEdicion('${u.id}')">Editar</button>
+            <button onclick="prepararReemplazo('${u.id}')">Reemplazar</button>
+            <button onclick="retirarUnidad('${u.id}')">Retirar</button>
+          </td>`;
+        filas.appendChild(tr);
+      });
+    }
+
+    async function guardar() {
+      const base_id = pestañaActual === "porBase" ? baseSeleccionadaId : document.getElementById("baseForm").value;
+      const categoria_id = pestañaActual === "porBase" ? document.getElementById("categoriaForm").value : pestañaActual;
+      const marca = document.getElementById("marca").value;
+      const modelo = document.getElementById("modelo").value;
+      const numero_serie = document.getElementById("numeroSerie").value;
+      const fecha_caducidad = document.getElementById("fechaCaducidad").value;
+      const nota = document.getElementById("nota").value;
+
+      if (!base_id || !categoria_id || !marca || !fecha_caducidad) {
+        alert("Rellena al menos base, categoría, marca y fecha de caducidad.");
+        return;
+      }
+
+      if (editandoId) {
+        await client.from("material_seguridad").update({
+          base_id, categoria_id, marca, modelo, numero_serie, fecha_caducidad
+        }).eq("id", editandoId);
+        editandoId = null;
+        limpiarFormulario();
+        cargarTabla();
+        return;
+      }
+
+      if (reemplazandoId) {
+        await client.from("material_seguridad")
+          .update({ estado: "reemplazado", nota: nota || "Reemplazado" })
+          .eq("id", reemplazandoId);
+        reemplazandoId = null;
+      }
+
+      await client.from("material_seguridad").insert({
+        base_id, categoria_id, marca, modelo, numero_serie, fecha_caducidad
+      });
+
+      limpiarFormulario();
+      cargarTabla();
+    }
+
+    async function prepararEdicion(id) {
+      const { data: u } = await client.from("material_seguridad").select("*").eq("id", id).single();
+      editandoId = id;
+      reemplazandoId = null;
+
+      if (pestañaActual === "porBase") {
+        document.getElementById("categoriaForm").value = u.categoria_id;
+      } else {
+        document.getElementById("baseForm").value = u.base_id;
+      }
+      document.getElementById("marca").value = u.marca;
+      document.getElementById("modelo").value = u.modelo || "";
+      document.getElementById("numeroSerie").value = u.numero_serie || "";
+      document.getElementById("fechaCaducidad").value = u.fecha_caducidad;
+      document.getElementById("btnGuardar").innerText = "Guardar edición";
+      document.getElementById("btnCancelar").style.display = "inline";
+      document.getElementById("formAlta").scrollIntoView({ behavior: "smooth" });
+    }
+
+    function prepararReemplazo(id) {
+      reemplazandoId = id;
+      editandoId = null;
+      document.getElementById("btnGuardar").innerText = "Guardar reemplazo";
+      document.getElementById("btnCancelar").style.display = "inline";
+      document.getElementById("formAlta").scrollIntoView({ behavior: "smooth" });
+    }
+
+    async function retirarUnidad(id) {
+      if (!confirm("¿Retirar esta unidad? Quedará en el histórico, no se borra del todo.")) return;
+      await client.from("material_seguridad").update({ estado: "retirado" }).eq("id", id);
+      cargarTabla();
+    }
+
+    function limpiarFormulario() {
+      document.getElementById("marca").value = "";
+      document.getElementById("modelo").value = "";
+      document.getElementById("numeroSerie").value = "";
+      document.getElementById("fechaCaducidad").value = "";
+      document.getElementById("nota").value = "";
+      document.getElementById("btnGuardar").innerText = "Guardar";
+      document.getElementById("btnCancelar").style.display = "none";
+    }
+
+    function cancelarFormulario() {
+      editandoId = null;
+      reemplazandoId = null;
+      limpiarFormulario();
+    }
+
+    async function iniciar() {
+      await cargarDatosBase();
+      renderPestañas();
+      cargarTabla();
+    }
+
+    iniciar();
+  </script>
+</body>
+</html>
