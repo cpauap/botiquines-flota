@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>Inicio</title>
+<link rel="stylesheet" href="estilo.css">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+  .opciones { display: flex; gap: 20px; flex-wrap: wrap; margin-top: 20px; }
+  .opcion { flex: 1; min-width: 220px; background: var(--blanco); border: 1px solid var(--gris-borde); border-radius: 10px; padding: 30px 20px; text-align: center; cursor: pointer; transition: box-shadow 0.15s ease; }
+  .opcion:hover { box-shadow: 0 4px 14px rgba(11,46,79,0.15); }
+  .opcion h3 { color: var(--azul-marino); margin-top: 0; }
+</style>
+</head>
+<body>
+  <div class="barra-superior">
+    <h1>Flota</h1>
+    <button onclick="cerrarSesion()">Cerrar sesión</button>
+  </div>
+  <div class="contenedor">
+    <div class="opciones">
+      <div class="opcion" onclick="window.location.href='panel.html'">
+        <h3>Botiquines</h3>
+        <p>Inventario de primeros auxilios por helicóptero.</p>
+      </div>
+      <div class="opcion" onclick="window.location.href='material.html'">
+        <h3>Material de supervivencia</h3>
+        <p>Chalecos, balsas, balizas y respiradores por base.</p>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const SUPABASE_URL = "https://pfyvliaknlpuawuppsko.supabase.co";
+    const SUPABASE_KEY = "sb_publishable_f3F70B-1EnU3aRpQaFu7_A_szShexxl";
+    const client = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+    async function comprobarSesion() {
+      const { data } = await client.auth.getSession();
+      if (!data.session) {
+        window.location.href = "index.html";
+      }
+    }
+
+    async function cerrarSesion() {
+      await client.auth.signOut();
+      window.location.href = "index.html";
+    }
+
+    comprobarSesion();
+  </script>
+</body>
+</html>
