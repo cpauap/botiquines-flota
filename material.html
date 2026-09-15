@@ -47,6 +47,7 @@
     <input type="text" id="modelo" placeholder="Modelo">
     <input type="text" id="numeroSerie" placeholder="Número de serie">
     <input type="date" id="fechaCaducidad">
+    Fecha de revisión: <input type="date" id="fechaRevision">
     <input type="text" id="nota" placeholder="Nota (motivo del reemplazo, opcional)" style="width:220px;">
     <button id="btnGuardar" onclick="guardar()">Guardar</button>
     <button id="btnCancelar" onclick="cancelarFormulario()" style="display:none;">Cancelar</button>
@@ -71,13 +72,18 @@
       return `${dia}/${mes}/${anio}`;
     }
 
-    function claseSemaforo(fecha) {
+    function estadoFecha(fecha) {
+      if (!fecha) return null;
       const hoy = new Date();
-      const cad = new Date(fecha);
-      const dias = Math.floor((cad - hoy) / (1000 * 60 * 60 * 24));
+      const f = new Date(fecha);
+      const dias = Math.floor((f - hoy) / (1000 * 60 * 60 * 24));
       if (dias < 0) return "rojo";
       if (dias <= 45) return dias <= 15 ? "rojo" : "ambar";
       return "verde";
+    }
+
+    function claseSemaforo(fechaCaducidad) {
+      return estadoFecha(fechaCaducidad) || "";
     }
 
     async function cargarDatosBase() {
@@ -166,10 +172,10 @@
       if (esPorBase) {
         if (!baseSeleccionadaId) { cabecera.innerHTML = ""; return; }
         query = query.eq("base_id", baseSeleccionadaId);
-        cabecera.innerHTML = "<tr><th>Categoría</th><th>Marca</th><th>Modelo</th><th>Nº Serie</th><th>Caducidad</th><th>Acción</th><th>Mover a</th></tr>";
+        cabecera.innerHTML = "<tr><th>Categoría</th><th>Marca</th><th>Modelo</th><th>Nº Serie</th><th>Caducidad</th><th>Revisión</th><th>Acción</th><th>Mover a</th></tr>";
       } else {
         query = query.eq("categoria_id", pestañaActual);
-        cabecera.innerHTML = "<tr><th>Base</th><th>Marca</th><th>Modelo</th><th>Nº Serie</th><th>Caducidad</th><th>Acción</th><th>Mover a</th></tr>";
+        cabecera.innerHTML = "<tr><th>Base</th><th>Marca</th><th>Modelo</th><th>Nº Serie</th><th>Caducidad</th><th>Revisión</th><th>Acción</th><th>Mover a</th></tr>";
       }
 
       const { data: unidades } = await query.order("fecha_caducidad");
@@ -188,6 +194,7 @@
           <td>${u.modelo || ""}</td>
           <td>${u.numero_serie || ""}</td>
           <td>${formatearFecha(u.fecha_caducidad)}</td>
+          <td>${formatearFecha(u.fecha_revision)}</td>
           <td>
             <button onclick="prepararEdicion('${u.id}')">Editar</button>
             <button onclick="prepararReemplazo('${u.id}')">Reemplazar</button>
@@ -208,6 +215,7 @@
       const modelo = document.getElementById("modelo").value;
       const numero_serie = document.getElementById("numeroSerie").value;
       const fecha_caducidad = document.getElementById("fechaCaducidad").value;
+      const fecha_revision = document.getElementById("fechaRevision").value;
       const nota = document.getElementById("nota").value;
 
       if (!base_id || !categoria_id || !marca || !fecha_caducidad) {
@@ -217,7 +225,8 @@
 
       if (editandoId) {
         await client.from("material_seguridad").update({
-          base_id, categoria_id, marca, modelo, numero_serie, fecha_caducidad
+          base_id, categoria_id, marca, modelo, numero_serie, fecha_caducidad,
+          fecha_revision: fecha_revision || null
         }).eq("id", editandoId);
         editandoId = null;
         limpiarFormulario();
@@ -233,7 +242,8 @@
       }
 
       await client.from("material_seguridad").insert({
-        base_id, categoria_id, marca, modelo, numero_serie, fecha_caducidad
+        base_id, categoria_id, marca, modelo, numero_serie, fecha_caducidad,
+        fecha_revision: fecha_revision || null
       });
 
       limpiarFormulario();
@@ -254,6 +264,7 @@
       document.getElementById("modelo").value = u.modelo || "";
       document.getElementById("numeroSerie").value = u.numero_serie || "";
       document.getElementById("fechaCaducidad").value = u.fecha_caducidad;
+      document.getElementById("fechaRevision").value = u.fecha_revision || "";
       document.getElementById("btnGuardar").innerText = "Guardar edición";
       document.getElementById("btnCancelar").style.display = "inline";
       document.getElementById("formAlta").scrollIntoView({ behavior: "smooth" });
@@ -284,6 +295,7 @@
       document.getElementById("modelo").value = "";
       document.getElementById("numeroSerie").value = "";
       document.getElementById("fechaCaducidad").value = "";
+      document.getElementById("fechaRevision").value = "";
       document.getElementById("nota").value = "";
       document.getElementById("btnGuardar").innerText = "Guardar";
       document.getElementById("btnCancelar").style.display = "none";
