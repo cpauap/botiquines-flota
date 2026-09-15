@@ -56,6 +56,8 @@
     <input type="text" id="numeroSerie" placeholder="Número de serie">
     <input type="date" id="fechaCaducidad">
     Fecha de revisión: <input type="date" id="fechaRevision">
+    <br>
+    Fecha desde la que está en esta base: <input type="date" id="fechaMovimientoAlta">
     <input type="text" id="nota" placeholder="Nota (motivo del reemplazo, opcional)" style="width:220px;">
     <button id="btnGuardar" onclick="guardar()">Guardar</button>
     <button id="btnCancelar" onclick="cancelarFormulario()" style="display:none;">Cancelar</button>
@@ -269,6 +271,7 @@
           </td>
           <td>
             <select id="mover-${u.id}">${opcionesBases}</select>
+            <input type="date" id="fechaMover-${u.id}" value="${new Date().toISOString().split("T")[0]}">
             <button onclick="moverUnidad('${u.id}')">Mover</button>
           </td>`;
         filas.appendChild(tr);
@@ -283,6 +286,7 @@
       const numero_serie = document.getElementById("numeroSerie").value;
       const fecha_caducidad = document.getElementById("fechaCaducidad").value;
       const fecha_revision = document.getElementById("fechaRevision").value;
+      const fecha_movimiento = document.getElementById("fechaMovimientoAlta").value;
       const nota = document.getElementById("nota").value;
 
       if (!base_id || !categoria_id || !marca || !fecha_caducidad) {
@@ -308,9 +312,18 @@
         reemplazandoId = null;
       }
 
-      await client.from("material_seguridad").insert({
+      const { data: sesion } = await client.auth.getSession();
+
+      const { data: nuevo } = await client.from("material_seguridad").insert({
         base_id, categoria_id, marca, modelo, numero_serie, fecha_caducidad,
         fecha_revision: fecha_revision || null
+      }).select("id").single();
+
+      await client.from("movimientos_material").insert({
+        material_id: nuevo.id,
+        base_id,
+        fecha: fecha_movimiento || new Date().toISOString().split("T")[0],
+        creado_por: sesion.session.user.id
       });
 
       limpiarFormulario();
@@ -347,7 +360,16 @@
 
     async function moverUnidad(id) {
       const nuevaBase = document.getElementById("mover-" + id).value;
+      const fecha = document.getElementById("fechaMover-" + id).value;
+      const { data: sesion } = await client.auth.getSession();
+
       await client.from("material_seguridad").update({ base_id: nuevaBase }).eq("id", id);
+      await client.from("movimientos_material").insert({
+        material_id: id,
+        base_id: nuevaBase,
+        fecha: fecha || new Date().toISOString().split("T")[0],
+        creado_por: sesion.session.user.id
+      });
       cargarTabla();
     }
 
@@ -363,6 +385,7 @@
       document.getElementById("numeroSerie").value = "";
       document.getElementById("fechaCaducidad").value = "";
       document.getElementById("fechaRevision").value = "";
+      document.getElementById("fechaMovimientoAlta").value = new Date().toISOString().split("T")[0];
       document.getElementById("nota").value = "";
       document.getElementById("btnGuardar").innerText = "Guardar";
       document.getElementById("btnCancelar").style.display = "none";
@@ -375,6 +398,7 @@
     }
 
     async function iniciar() {
+      document.getElementById("fechaMovimientoAlta").value = new Date().toISOString().split("T")[0];
       await cargarDatosBase();
       renderPestañas();
       cargarTabla();
