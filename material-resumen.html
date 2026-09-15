@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>Resumen de material de supervivencia</title>
+<link rel="stylesheet" href="estilo.css">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="pdfmake.min.js"></script>
+<script src="vfs_fonts.js"></script>
+<script src="exceljs.min.js"></script>
+<style>
+  table { border-collapse: collapse; }
+  th, td { border: 1px solid var(--gris-borde); padding: 6px 8px; vertical-align: top; font-size: 13px; }
+  th { background-color: var(--azul-marino); color: var(--blanco); position: sticky; top: 0; }
+  .celda-categoria { font-weight: 600; background: #f4f8fb; white-space: nowrap; }
+  .item-linea { padding: 2px 4px; margin-bottom: 2px; border-radius: 3px; }
+  .item-rojo { background-color: #F8D7DA; }
+  .item-amarillo { background-color: #FFF176; }
+  .tabla-scroll { overflow-x: auto; }
+</style>
+</head>
+<body>
+  <div class="barra-superior">
+    <h1>Resumen de material de supervivencia</h1>
+    <div>
+      <button onclick="generarPDF()">Descargar PDF</button>
+      <button onclick="generarExcel()">Descargar Excel</button>
+      <button onclick="window.location.href='material.html'">← Material</button>
+    </div>
+  </div>
+  <div class="contenedor" style="max-width: none;">
+  <div class="tarjeta tabla-scroll">
+    <table id="tablaResumen"></table>
+  </div>
+  </div>
+
+  <script>
+    const SUPABASE_URL = "https://pfyvliaknlpuawuppsko.supabase.co";
+    const SUPABASE_KEY = "sb_publishable_f3F70B-1EnU3aRpQaFu7_A_szShexxl";
+    const client = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+    const UMBRAL_DIAS = 90;
+    let categorias = [];
+    let bases = [];
+    let mapaUnidades = {};
+
+    function formatearFecha(fechaISO) {
+      if (!fechaISO) return "";
+      const [anio, mes, dia] = fechaISO.split("-");
+      return `${dia}/${mes}/${anio}`;
+    }
+
+    function estadoUnidad(u) {
+      const hoy = new Date().toISOString().split("T")[0];
+      const dias = Math.floor((new Date(u.fecha_caducidad) - new Date(hoy)) / (1000 * 60 * 60 * 24));
+      if (dias < 0) return "rojo";
+      if (dias <= UMBRAL_DIAS) return "amarillo";
+      return "";
+    }
+
+    async function obtenerDatos() {
+      const { data: cats } = await client.from("categorias_material").select("id, nombre").order("orden");
+      categorias = cats;
+
+      const { data: bs } = await client.from("bases").select("id, nombre").order("nombre");
+      bases = bs;
+
+      const { data: unidades } = await client.from("material_seguridad").select("*").eq("estado", "activo");
+
+      mapaUnidades = {};
+      unidades.forEach(u => {
+        const clave = u.categoria_id + "|" + u.base_id;
+        if (!mapaUnidades[clave]) mapaUnidades[clave] = [];
+        mapaUnidades[clave].push(u);
+      });
+    }
+
+    function textoUnidad(u) {
+      const producto = [u.marca, u.modelo].filter(Boolean).join(" ");
+      const serie = u.numero_serie ? ` [${u.numero_serie}]` : "";
+      return `${producto}${serie} - ${formatearFecha(u.fecha_caducidad)}`;
+    }
+
+    function renderTablaHTML() {
+      const tabla = document.getElementById("tablaResumen");
+      tabla.innerHTML = "";
+
+      const thead = document.createElement("thead");
+      const trCab = document.createElement("tr");
+      trCab.innerHTML = "<th>Categoría</th>" + bases.map(b => `<th>${b.nombre}</th>`).join("");
+      thead.appendChild(trCab);
+      tabla.appendChild(thead);
+
+      const tbody = document.createElement("tbody");
+      categorias.forEach(cat => {
+        const tr = document.createElement("tr");
+        let fila = `<td class="celda-categoria">${cat.nombre}</td>`;
+
+        bases.forEach(b => {
+          const unidades = mapaUnidades[cat.id + "|" + b.id] || [];
+          if (unidades.length === 0) {
+            fila += "<td></td>";
+          } else {
+            const lineas = unidades.map(u => {
+              const estado = estadoUnidad(u);
+              const clase = estado === "rojo" ? "item-rojo" : (estado === "amarillo" ? "item-amarillo" : "");
+              return `<div class="item-linea ${clase}">${textoUnidad(u)}</div>`;
+            }).join("");
+            fila += `<td>${lineas}</td>`;
+          }
+        });
+
+        tr.innerHTML = fila;
+        tbody.appendChild(tr);
+      });
+      tabla.appendChild(tbody);
+    }
+
+    function generarPDF() {
+      const TAMANO_BLOQUE = 10;
+      const bloques = [];
+      for (let i = 0; i < bases.length; i += TAMANO_BLOQUE) {
+        bloques.push(bases.slice(i, i + TAMANO_BLOQUE));
+      }
+
+      const contenido = [
+        { text: "Resumen de material de supervivencia", fontSize: 14, bold: true, margin: [0, 0, 0, 10] }
+      ];
+
+      bloques.forEach((bloque, indiceBloque) => {
+        const anchoCols = ["auto"].concat(bloque.map(() => "*"));
+
+        const filaCabecera = [{ text: "Categoría", bold: true, fillColor: "#0B2E4F", color: "white" }]
+          .concat(bloque.map(b => ({ text: b.nombre, bold: true, fillColor: "#0B2E4F", color: "white" })));
+
+        const cuerpo = [filaCabecera];
+
+        categorias.forEach(cat => {
+          const fila = [{ text: cat.nombre, bold: true }];
+
+          bloque.forEach(b => {
+            const unidades = mapaUnidades[cat.id + "|" + b.id] || [];
+            if (unidades.length === 0) {
+              fila.push({ text: "" });
+              return;
+            }
+
+            const spans = [];
+            unidades.forEach((u, i) => {
+              const estado = estadoUnidad(u);
+              const color = estado === "rojo" ? "#C0392B" : (estado === "amarillo" ? "#B8860B" : undefined);
+              spans.push({
+                text: textoUnidad(u) + (i < unidades.length - 1 ? "\n" : ""),
+                color: color,
+                bold: estado !== ""
+              });
+            });
+            fila.push({ text: spans });
+          });
+
+          cuerpo.push(fila);
+        });
+
+        contenido.push({
+          table: { headerRows: 1, widths: anchoCols, body: cuerpo },
+          pageBreak: indiceBloque < bloques.length - 1 ? "after" : undefined
+        });
+      });
+
+      const docDefinition = {
+        pageOrientation: "landscape",
+        pageMargins: [20, 20, 20, 20],
+        content: contenido,
+        defaultStyle: { fontSize: 8 }
+      };
+
+      pdfMake.createPdf(docDefinition).download("Resumen_material_supervivencia.pdf");
+    }
+
+    async function generarExcel() {
+      const workbook = new ExcelJS.Workbook();
+      const hoja = workbook.addWorksheet("Resumen material");
+
+      const columnas = [{ header: "Categoría", key: "categoria", width: 25 }]
+        .concat(bases.map(b => ({ header: b.nombre, key: b.id, width: 28 })));
+      hoja.columns = columnas;
+
+      const filaCabecera = hoja.getRow(1);
+      filaCabecera.eachCell(celda => {
+        celda.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF0B2E4F" } };
+        celda.font = { color: { argb: "FFFFFFFF" }, bold: true };
+      });
+
+      categorias.forEach(cat => {
+        const fila = { categoria: cat.nombre };
+
+        bases.forEach(b => {
+          const unidades = mapaUnidades[cat.id + "|" + b.id] || [];
+          if (unidades.length === 0) {
+            fila[b.id] = "";
+            return;
+          }
+
+          const runs = unidades.map((u, i) => {
+            const estado = estadoUnidad(u);
+            const color = estado === "rojo" ? "FFC0392B" : (estado === "amarillo" ? "FFB8860B" : "FF000000");
+            return {
+              text: textoUnidad(u) + (i < unidades.length - 1 ? "\n" : ""),
+              font: { color: { argb: color }, bold: estado !== "" }
+            };
+          });
+
+          fila[b.id] = { richText: runs };
+        });
+
+        hoja.addRow(fila);
+      });
+
+      hoja.eachRow(fila => {
+        fila.alignment = { wrapText: true, vertical: "top" };
+      });
+
+      const buffer = await workbook.xlsx.writeBuffer();
+      const blob = new Blob([buffer], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "Resumen_material_supervivencia.xlsx";
+      a.click();
+    }
+
+    async function iniciar() {
+      await obtenerDatos();
+      renderTablaHTML();
+    }
+
+    iniciar();
+  </script>
+</body>
+</html>
