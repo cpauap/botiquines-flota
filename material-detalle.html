@@ -23,7 +23,7 @@
   <div class="tarjeta">
     <h3>Historial de ubicaciones</h3>
     <table>
-      <thead><tr><th>Fecha</th><th>De</th><th>A</th></tr></thead>
+      <thead><tr><th>Fecha</th><th>Base</th><th></th></tr></thead>
       <tbody id="filasHistorialUbicacion"></tbody>
     </table>
   </div>
@@ -88,34 +88,38 @@
     }
 
     async function cargarHistorialUbicacion() {
-      const { data: logs } = await client
-        .from("audit_log")
+      const { data: movimientos } = await client
+        .from("movimientos_material")
         .select("*")
-        .eq("tabla", "material_seguridad")
-        .eq("registro_id", materialId)
-        .order("creado_en", { ascending: true });
+        .eq("material_id", materialId)
+        .order("fecha", { ascending: false });
 
       const filas = document.getElementById("filasHistorialUbicacion");
       filas.innerHTML = "";
 
-      logs.forEach(l => {
-        const antes = l.datos_anteriores?.base_id;
-        const despues = l.datos_nuevos?.base_id;
+      const opcionesBases = Object.entries(mapaBases)
+        .map(([id, nombre]) => `<option value="${id}">${nombre}</option>`).join("");
 
-        if (l.accion === "insert") {
-          const tr = document.createElement("tr");
-          tr.innerHTML = `<td>${formatearFechaHora(l.creado_en)}</td><td>—</td><td>${mapaBases[despues] || ""}</td>`;
-          filas.appendChild(tr);
-        } else if (antes && despues && antes !== despues) {
-          const tr = document.createElement("tr");
-          tr.innerHTML = `<td>${formatearFechaHora(l.creado_en)}</td><td>${mapaBases[antes] || ""}</td><td>${mapaBases[despues] || ""}</td>`;
-          filas.appendChild(tr);
-        }
+      movimientos.forEach(m => {
+        const tr = document.createElement("tr");
+        const opciones = opcionesBases.replace(`value="${m.base_id}"`, `value="${m.base_id}" selected`);
+        tr.innerHTML = `
+          <td><input type="date" id="fecha-mov-${m.id}" value="${m.fecha}"></td>
+          <td><select id="base-mov-${m.id}">${opciones}</select></td>
+          <td><button onclick="guardarMovimiento('${m.id}')">Guardar</button></td>`;
+        filas.appendChild(tr);
       });
 
-      if (filas.children.length === 0) {
-        filas.innerHTML = "<tr><td colspan='3'>Sin cambios de ubicación registrados.</td></tr>";
+      if (movimientos.length === 0) {
+        filas.innerHTML = "<tr><td colspan='3'>Sin movimientos registrados.</td></tr>";
       }
+    }
+
+    async function guardarMovimiento(id) {
+      const fecha = document.getElementById("fecha-mov-" + id).value;
+      const base_id = document.getElementById("base-mov-" + id).value;
+      await client.from("movimientos_material").update({ fecha, base_id }).eq("id", id);
+      cargarHistorialUbicacion();
     }
 
     async function cargarNotas() {
