@@ -40,6 +40,20 @@
     <button onclick="subirDocumentoBase()">Subir documento</button>
   </div>
 
+  <div class="tarjeta" style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
+    <input type="text" id="buscador" placeholder="Buscar por P/N o S/N" oninput="renderFilasTabla()">
+    Ordenar por:
+    <select id="ordenarPor" onchange="renderFilasTabla()">
+      <option value="defecto">Por defecto</option>
+      <option value="categoria">Categoría/Base</option>
+      <option value="marca">Marca</option>
+      <option value="pn">P/N</option>
+      <option value="sn">S/N</option>
+      <option value="caducidad">Caducidad</option>
+      <option value="revision">Revisión</option>
+    </select>
+  </div>
+
   <div class="tarjeta">
     <table>
       <thead id="cabeceraTabla"></thead>
@@ -76,6 +90,8 @@
     let baseSeleccionadaId = null;
     let editandoId = null;
     let reemplazandoId = null;
+    let unidadesCargadas = [];
+    let esPorBaseActual = true;
 
     function formatearFecha(fechaISO) {
       if (!fechaISO) return "";
@@ -226,6 +242,7 @@
 
     async function cargarTabla() {
       const esPorBase = pestañaActual === "porBase";
+      esPorBaseActual = esPorBase;
       document.getElementById("selectorBase").style.display = esPorBase ? "block" : "none";
       document.getElementById("documentosSeccion").style.display = esPorBase ? "block" : "none";
       document.getElementById("baseForm").style.display = esPorBase ? "none" : "inline";
@@ -234,13 +251,11 @@
       if (esPorBase) cargarDocumentosBase();
 
       const cabecera = document.getElementById("cabeceraTabla");
-      const filas = document.getElementById("filasTabla");
-      filas.innerHTML = "";
 
       let query = client.from("material_seguridad").select("*").eq("estado", "activo");
 
       if (esPorBase) {
-        if (!baseSeleccionadaId) { cabecera.innerHTML = ""; return; }
+        if (!baseSeleccionadaId) { cabecera.innerHTML = ""; unidadesCargadas = []; renderFilasTabla(); return; }
         query = query.eq("base_id", baseSeleccionadaId);
         cabecera.innerHTML = "<tr><th>Categoría</th><th>Nombre</th><th>Marca</th><th>P/N</th><th>S/N</th><th>Caducidad</th><th>Revisión</th><th>Acción</th><th>Mover a</th></tr>";
       } else {
@@ -248,10 +263,40 @@
         cabecera.innerHTML = "<tr><th>Base</th><th>Nombre</th><th>Marca</th><th>P/N</th><th>S/N</th><th>Caducidad</th><th>Revisión</th><th>Acción</th><th>Mover a</th></tr>";
       }
 
-      const { data: unidades } = await query.order("fecha_caducidad");
+      const { data: unidades } = await query;
+      unidadesCargadas = unidades || [];
+      renderFilasTabla();
+    }
+
+    function renderFilasTabla() {
+      const esPorBase = esPorBaseActual;
+      const filas = document.getElementById("filasTabla");
+      filas.innerHTML = "";
 
       const mapaCategorias = Object.fromEntries(categorias.map(c => [c.id, c.nombre]));
       const mapaBases = Object.fromEntries(bases.map(b => [b.id, b.nombre]));
+
+      const busqueda = (document.getElementById("buscador")?.value || "").toLowerCase().trim();
+      let unidades = unidadesCargadas.filter(u => {
+        if (!busqueda) return true;
+        return (u.modelo || "").toLowerCase().includes(busqueda) || (u.numero_serie || "").toLowerCase().includes(busqueda);
+      });
+
+      const orden = document.getElementById("ordenarPor")?.value || "defecto";
+      const comparadores = {
+        categoria: (a, b) => {
+          const na = esPorBase ? (mapaCategorias[a.categoria_id] || "") : (mapaBases[a.base_id] || "");
+          const nb = esPorBase ? (mapaCategorias[b.categoria_id] || "") : (mapaBases[b.base_id] || "");
+          return na.localeCompare(nb);
+        },
+        marca: (a, b) => (a.marca || "").localeCompare(b.marca || ""),
+        pn: (a, b) => (a.modelo || "").localeCompare(b.modelo || ""),
+        sn: (a, b) => (a.numero_serie || "").localeCompare(b.numero_serie || ""),
+        caducidad: (a, b) => (a.fecha_caducidad || "").localeCompare(b.fecha_caducidad || ""),
+        revision: (a, b) => (a.fecha_revision || "").localeCompare(b.fecha_revision || ""),
+        defecto: (a, b) => (a.fecha_caducidad || "").localeCompare(b.fecha_caducidad || "")
+      };
+      unidades = [...unidades].sort(comparadores[orden] || comparadores.defecto);
 
       unidades.forEach(u => {
         const tr = document.createElement("tr");
