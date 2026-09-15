@@ -77,8 +77,8 @@
       document.getElementById("datosBasicos").innerHTML = `
         <p><b>Categoría:</b> ${mapaCategorias[u.categoria_id] || ""}</p>
         ${u.nombre ? `<p><b>Nombre:</b> ${u.nombre}</p>` : ""}
-        <p><b>Marca:</b> ${u.marca} &nbsp; <b>Modelo:</b> ${u.modelo || ""}</p>
-        <p><b>Nº de serie:</b> ${u.numero_serie || ""}</p>
+        <p><b>Marca:</b> ${u.marca} &nbsp; <b>P/N:</b> ${u.modelo || ""}</p>
+        <p><b>S/N:</b> ${u.numero_serie || ""}</p>
         <p><b>Base actual:</b> ${mapaBases[u.base_id] || ""}</p>
         <p><b>Caducidad:</b> ${formatearFecha(u.fecha_caducidad)} &nbsp; <b>Revisión:</b> ${formatearFecha(u.fecha_revision)}</p>
         <p><b>Estado:</b> ${u.estado}</p>
