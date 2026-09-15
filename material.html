@@ -52,6 +52,7 @@
     <select id="baseForm" style="display:none;"></select>
     <select id="categoriaForm" style="display:none;"></select>
     <input type="text" id="marca" placeholder="Marca">
+    <input type="text" id="nombreObjeto" placeholder="Nombre (opcional)">
     <input type="text" id="modelo" placeholder="Modelo">
     <input type="text" id="numeroSerie" placeholder="Número de serie">
     <input type="date" id="fechaCaducidad">
@@ -241,10 +242,10 @@
       if (esPorBase) {
         if (!baseSeleccionadaId) { cabecera.innerHTML = ""; return; }
         query = query.eq("base_id", baseSeleccionadaId);
-        cabecera.innerHTML = "<tr><th>Categoría</th><th>Marca</th><th>Modelo</th><th>Nº Serie</th><th>Caducidad</th><th>Revisión</th><th>Acción</th><th>Mover a</th></tr>";
+        cabecera.innerHTML = "<tr><th>Categoría</th><th>Nombre</th><th>Marca</th><th>Modelo</th><th>Nº Serie</th><th>Caducidad</th><th>Revisión</th><th>Acción</th><th>Mover a</th></tr>";
       } else {
         query = query.eq("categoria_id", pestañaActual);
-        cabecera.innerHTML = "<tr><th>Base</th><th>Marca</th><th>Modelo</th><th>Nº Serie</th><th>Caducidad</th><th>Revisión</th><th>Acción</th><th>Mover a</th></tr>";
+        cabecera.innerHTML = "<tr><th>Base</th><th>Nombre</th><th>Marca</th><th>Modelo</th><th>Nº Serie</th><th>Caducidad</th><th>Revisión</th><th>Acción</th><th>Mover a</th></tr>";
       }
 
       const { data: unidades } = await query.order("fecha_caducidad");
@@ -259,6 +260,7 @@
         const opcionesBases = bases.map(b => `<option value="${b.id}" ${b.id === u.base_id ? "selected" : ""}>${b.nombre}</option>`).join("");
         tr.innerHTML = `
           <td>${primeraCol}</td>
+          <td>${u.nombre || ""}</td>
           <td style="cursor:pointer; text-decoration:underline;" onclick="window.location.href='material-detalle.html?id=${u.id}'">${u.marca}</td>
           <td>${u.modelo || ""}</td>
           <td>${u.numero_serie || ""}</td>
@@ -282,6 +284,7 @@
       const base_id = pestañaActual === "porBase" ? baseSeleccionadaId : document.getElementById("baseForm").value;
       const categoria_id = pestañaActual === "porBase" ? document.getElementById("categoriaForm").value : pestañaActual;
       const marca = document.getElementById("marca").value;
+      const nombre = document.getElementById("nombreObjeto").value;
       const modelo = document.getElementById("modelo").value;
       const numero_serie = document.getElementById("numeroSerie").value;
       const fecha_caducidad = document.getElementById("fechaCaducidad").value;
@@ -296,7 +299,7 @@
 
       if (editandoId) {
         await client.from("material_seguridad").update({
-          base_id, categoria_id, marca, modelo, numero_serie, fecha_caducidad,
+          base_id, categoria_id, marca, nombre, modelo, numero_serie, fecha_caducidad,
           fecha_revision: fecha_revision || null
         }).eq("id", editandoId);
         editandoId = null;
@@ -315,7 +318,7 @@
       const { data: sesion } = await client.auth.getSession();
 
       const { data: nuevo } = await client.from("material_seguridad").insert({
-        base_id, categoria_id, marca, modelo, numero_serie, fecha_caducidad,
+        base_id, categoria_id, marca, nombre, modelo, numero_serie, fecha_caducidad,
         fecha_revision: fecha_revision || null
       }).select("id").single();
 
@@ -341,6 +344,7 @@
         document.getElementById("baseForm").value = u.base_id;
       }
       document.getElementById("marca").value = u.marca;
+      document.getElementById("nombreObjeto").value = u.nombre || "";
       document.getElementById("modelo").value = u.modelo || "";
       document.getElementById("numeroSerie").value = u.numero_serie || "";
       document.getElementById("fechaCaducidad").value = u.fecha_caducidad;
@@ -381,6 +385,7 @@
 
     function limpiarFormulario() {
       document.getElementById("marca").value = "";
+      document.getElementById("nombreObjeto").value = "";
       document.getElementById("modelo").value = "";
       document.getElementById("numeroSerie").value = "";
       document.getElementById("fechaCaducidad").value = "";
