@@ -32,6 +32,14 @@
     <button onclick="verHistorico()">Histórico de esta base</button>
   </div>
 
+  <div id="documentosSeccion" class="tarjeta" style="display:none;">
+    <h3>Documentos de la base</h3>
+    <ul id="listaDocumentosBase"></ul>
+    <input type="text" id="nombreDocumentoBase" placeholder="Nombre del documento">
+    <input type="file" id="inputDocumentoBase">
+    <button onclick="subirDocumentoBase()">Subir documento</button>
+  </div>
+
   <div class="tarjeta">
     <table>
       <thead id="cabeceraTabla"></thead>
@@ -155,13 +163,72 @@
     function cambiarBaseSeleccionada() {
       baseSeleccionadaId = document.getElementById("baseSeleccionada").value;
       cargarTabla();
+      cargarDocumentosBase();
+    }
+
+    function limpiarNombreArchivo(nombre) {
+      return nombre
+        .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+        .replace(/[^a-zA-Z0-9.\-_]/g, "_");
+    }
+
+    async function subirDocumentoBase() {
+      const nombre = document.getElementById("nombreDocumentoBase").value;
+      const archivo = document.getElementById("inputDocumentoBase").files[0];
+      if (!nombre || !archivo || !baseSeleccionadaId) { alert("Pon un nombre, elige un archivo, y ten una base seleccionada."); return; }
+
+      const ruta = baseSeleccionadaId + "/" + Date.now() + "-" + limpiarNombreArchivo(archivo.name);
+      const { error: errorSubida } = await client.storage
+        .from("documentos-bases")
+        .upload(ruta, archivo);
+
+      if (errorSubida) { alert("Error al subir: " + errorSubida.message); return; }
+
+      const { data: sesion } = await client.auth.getSession();
+
+      await client.from("documentos_base").insert({
+        base_id: baseSeleccionadaId,
+        nombre: nombre,
+        url: ruta,
+        subido_por: sesion.session.user.id
+      });
+
+      document.getElementById("nombreDocumentoBase").value = "";
+      document.getElementById("inputDocumentoBase").value = "";
+      cargarDocumentosBase();
+    }
+
+    async function cargarDocumentosBase() {
+      if (pestañaActual !== "porBase" || !baseSeleccionadaId) return;
+
+      const { data: docs } = await client
+        .from("documentos_base")
+        .select("*")
+        .eq("base_id", baseSeleccionadaId)
+        .order("creado_en", { ascending: false });
+
+      const lista = document.getElementById("listaDocumentosBase");
+      lista.innerHTML = "";
+
+      for (const doc of docs) {
+        const { data: firmada } = await client.storage
+          .from("documentos-bases")
+          .createSignedUrl(doc.url, 3600);
+
+        const li = document.createElement("li");
+        li.innerHTML = `<a href="${firmada.signedUrl}" target="_blank">${doc.nombre}</a>`;
+        lista.appendChild(li);
+      }
     }
 
     async function cargarTabla() {
       const esPorBase = pestañaActual === "porBase";
       document.getElementById("selectorBase").style.display = esPorBase ? "block" : "none";
+      document.getElementById("documentosSeccion").style.display = esPorBase ? "block" : "none";
       document.getElementById("baseForm").style.display = esPorBase ? "none" : "inline";
       document.getElementById("categoriaForm").style.display = esPorBase ? "inline" : "none";
+
+      if (esPorBase) cargarDocumentosBase();
 
       const cabecera = document.getElementById("cabeceraTabla");
       const filas = document.getElementById("filasTabla");
@@ -190,7 +257,7 @@
         const opcionesBases = bases.map(b => `<option value="${b.id}" ${b.id === u.base_id ? "selected" : ""}>${b.nombre}</option>`).join("");
         tr.innerHTML = `
           <td>${primeraCol}</td>
-          <td>${u.marca}</td>
+          <td style="cursor:pointer; text-decoration:underline;" onclick="window.location.href='material-detalle.html?id=${u.id}'">${u.marca}</td>
           <td>${u.modelo || ""}</td>
           <td>${u.numero_serie || ""}</td>
           <td>${formatearFecha(u.fecha_caducidad)}</td>
