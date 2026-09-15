@@ -53,8 +53,8 @@
     <select id="categoriaForm" style="display:none;"></select>
     <input type="text" id="marca" placeholder="Marca">
     <input type="text" id="nombreObjeto" placeholder="Nombre (opcional)">
-    <input type="text" id="modelo" placeholder="Modelo">
-    <input type="text" id="numeroSerie" placeholder="Número de serie">
+    <input type="text" id="modelo" placeholder="P/N">
+    <input type="text" id="numeroSerie" placeholder="S/N">
     <input type="date" id="fechaCaducidad">
     Fecha de revisión: <input type="date" id="fechaRevision">
     <br>
@@ -242,10 +242,10 @@
       if (esPorBase) {
         if (!baseSeleccionadaId) { cabecera.innerHTML = ""; return; }
         query = query.eq("base_id", baseSeleccionadaId);
-        cabecera.innerHTML = "<tr><th>Categoría</th><th>Nombre</th><th>Marca</th><th>Modelo</th><th>Nº Serie</th><th>Caducidad</th><th>Revisión</th><th>Acción</th><th>Mover a</th></tr>";
+        cabecera.innerHTML = "<tr><th>Categoría</th><th>Nombre</th><th>Marca</th><th>P/N</th><th>S/N</th><th>Caducidad</th><th>Revisión</th><th>Acción</th><th>Mover a</th></tr>";
       } else {
         query = query.eq("categoria_id", pestañaActual);
-        cabecera.innerHTML = "<tr><th>Base</th><th>Nombre</th><th>Marca</th><th>Modelo</th><th>Nº Serie</th><th>Caducidad</th><th>Revisión</th><th>Acción</th><th>Mover a</th></tr>";
+        cabecera.innerHTML = "<tr><th>Base</th><th>Nombre</th><th>Marca</th><th>P/N</th><th>S/N</th><th>Caducidad</th><th>Revisión</th><th>Acción</th><th>Mover a</th></tr>";
       }
 
       const { data: unidades } = await query.order("fecha_caducidad");
