@@ -276,10 +276,11 @@
       const mapaCategorias = Object.fromEntries(categorias.map(c => [c.id, c.nombre]));
       const mapaBases = Object.fromEntries(bases.map(b => [b.id, b.nombre]));
 
-      const busqueda = (document.getElementById("buscador")?.value || "").toLowerCase().trim();
+      const normalizar = (t) => (t || "").toLowerCase().replace(/[\s\-]/g, "");
+      const busqueda = normalizar(document.getElementById("buscador")?.value || "");
       let unidades = unidadesCargadas.filter(u => {
         if (!busqueda) return true;
-        return (u.modelo || "").toLowerCase().includes(busqueda) || (u.numero_serie || "").toLowerCase().includes(busqueda);
+        return normalizar(u.modelo).includes(busqueda) || normalizar(u.numero_serie).includes(busqueda);
       });
 
       const orden = document.getElementById("ordenarPor")?.value || "defecto";
