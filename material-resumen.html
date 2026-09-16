@@ -9,29 +9,41 @@
 <script src="vfs_fonts.js"></script>
 <script src="exceljs.min.js"></script>
 <style>
-  table { border-collapse: collapse; }
-  th, td { border: 1px solid var(--gris-borde); padding: 6px 8px; vertical-align: top; font-size: 13px; }
-  th { background-color: var(--azul-marino); color: var(--blanco); position: sticky; top: 0; }
-  .celda-categoria { font-weight: 600; background: #f4f8fb; white-space: nowrap; }
-  .item-linea { padding: 2px 4px; margin-bottom: 2px; border-radius: 3px; }
-  .item-rojo { background-color: #F8D7DA; }
-  .item-amarillo { background-color: #FFF176; }
+  table { border-collapse: collapse; width: 100%; }
+  th, td { border: 1px solid #999; padding: 4px 6px; font-size: 12px; }
+  th { background-color: #1F5FA9; color: #fff; text-align: center; }
+  .grupo-titulo { background: var(--azul-marino); color: #fff; font-weight: 700; padding: 6px 10px; margin-top: 18px; border-radius: 6px 6px 0 0; }
+  .estado-caducado { background: #FF0000; color: #fff; font-weight: 700; text-align: center; }
+  .estado-util { background: #fff; color: #008000; font-weight: 700; text-align: center; }
+  .col-caducidad { color: #E36C0A; font-weight: 700; text-align: center; }
+  .col-material { background: #1F5FA9; color: #fff; font-weight: 700; }
+  .col-marca { color: #1F5FA9; font-weight: 700; text-align: center; }
+  .no-activo { color: #888; font-style: italic; text-align: center; }
   .tabla-scroll { overflow-x: auto; }
 </style>
 </head>
 <body>
   <div class="barra-superior">
-    <h1>Resumen de material de supervivencia</h1>
+    <h1>Resumen de material</h1>
     <div>
-      <button onclick="generarPDF()">Descargar PDF</button>
-      <button onclick="generarExcel()">Descargar Excel</button>
+      <button onclick="generarPDF()">PDF</button>
+      <button onclick="generarExcel()">Excel</button>
       <button onclick="window.location.href='material.html'">← Material</button>
     </div>
   </div>
   <div class="contenedor" style="max-width: none;">
-  <div class="tarjeta tabla-scroll">
-    <table id="tablaResumen"></table>
+
+  <div class="tarjeta">
+    Agrupar por:
+    <select id="agruparPor" onchange="render()">
+      <option value="categoria">Objeto (categoría)</option>
+      <option value="base">Base</option>
+    </select>
+    &nbsp;
+    <label><input type="checkbox" id="incluirNoActivos" checked onchange="render()"> Incluir retirados y reemplazados</label>
   </div>
+
+  <div id="contenido"></div>
   </div>
 
   <script>
@@ -39,185 +51,230 @@
     const SUPABASE_KEY = "sb_publishable_f3F70B-1EnU3aRpQaFu7_A_szShexxl";
     const client = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
-    const UMBRAL_DIAS = 90;
-    let categorias = [];
-    let bases = [];
-    let mapaUnidades = {};
+    let categorias = [], bases = [], unidades = [], ultimaNota = {};
 
-    function formatearFecha(fechaISO) {
-      if (!fechaISO) return "";
-      const [anio, mes, dia] = fechaISO.split("-");
-      return `${dia}/${mes}/${anio}`;
+    function formatearFecha(iso) {
+      if (!iso) return "";
+      const [a, m, d] = iso.split("-");
+      return `${d}/${m}/${a}`;
     }
 
-    function estadoUnidad(u) {
-      const hoy = new Date().toISOString().split("T")[0];
-      const dias = Math.floor((new Date(u.fecha_caducidad) - new Date(hoy)) / (1000 * 60 * 60 * 24));
-      if (dias < 0) return "rojo";
-      if (dias <= UMBRAL_DIAS) return "amarillo";
-      return "";
+    function estaCaducado(u) {
+      if (!u.fecha_caducidad) return false;
+      return u.fecha_caducidad < new Date().toISOString().split("T")[0];
     }
 
-    async function obtenerDatos() {
+    async function cargarDatos() {
       const { data: cats } = await client.from("categorias_material").select("id, nombre").order("orden");
       categorias = cats;
-
       const { data: bs } = await client.from("bases").select("id, nombre").order("nombre");
       bases = bs;
+      const { data: us } = await client.from("material_seguridad").select("*");
+      unidades = us || [];
 
-      const { data: unidades } = await client.from("material_seguridad").select("*").eq("estado", "activo");
+      const { data: notas } = await client
+        .from("notas_material")
+        .select("material_id, texto, creado_en")
+        .order("creado_en", { ascending: false });
 
-      mapaUnidades = {};
-      unidades.forEach(u => {
-        const clave = u.categoria_id + "|" + u.base_id;
-        if (!mapaUnidades[clave]) mapaUnidades[clave] = [];
-        mapaUnidades[clave].push(u);
+      ultimaNota = {};
+      (notas || []).forEach(n => {
+        if (!ultimaNota[n.material_id]) ultimaNota[n.material_id] = n.texto;
       });
     }
 
-    function textoUnidad(u) {
-      const producto = [u.marca, u.modelo].filter(Boolean).join(" ");
-      const serie = u.numero_serie ? ` [${u.numero_serie}]` : "";
-      return `${producto}${serie} - ${formatearFecha(u.fecha_caducidad)}`;
+    function filasFiltradas() {
+      const incluirNoActivos = document.getElementById("incluirNoActivos").checked;
+      return unidades.filter(u => incluirNoActivos || u.estado === "activo");
     }
 
-    function renderTablaHTML() {
-      const tabla = document.getElementById("tablaResumen");
-      tabla.innerHTML = "";
+    function render() {
+      const agruparPor = document.getElementById("agruparPor").value;
+      const mapaCategorias = Object.fromEntries(categorias.map(c => [c.id, c.nombre]));
+      const mapaBases = Object.fromEntries(bases.map(b => [b.id, b.nombre]));
+      const contenedor = document.getElementById("contenido");
+      contenedor.innerHTML = "";
 
-      const thead = document.createElement("thead");
-      const trCab = document.createElement("tr");
-      trCab.innerHTML = "<th>Categoría</th>" + bases.map(b => `<th>${b.nombre}</th>`).join("");
-      thead.appendChild(trCab);
-      tabla.appendChild(thead);
+      const grupos = agruparPor === "categoria"
+        ? categorias.map(c => ({ id: c.id, nombre: c.nombre, campo: "categoria_id" }))
+        : bases.map(b => ({ id: b.id, nombre: b.nombre, campo: "base_id" }));
 
-      const tbody = document.createElement("tbody");
-      categorias.forEach(cat => {
-        const tr = document.createElement("tr");
-        let fila = `<td class="celda-categoria">${cat.nombre}</td>`;
+      const datos = filasFiltradas();
 
-        bases.forEach(b => {
-          const unidades = mapaUnidades[cat.id + "|" + b.id] || [];
-          if (unidades.length === 0) {
-            fila += "<td></td>";
-          } else {
-            const lineas = unidades.map(u => {
-              const estado = estadoUnidad(u);
-              const clase = estado === "rojo" ? "item-rojo" : (estado === "amarillo" ? "item-amarillo" : "");
-              return `<div class="item-linea ${clase}">${textoUnidad(u)}</div>`;
-            }).join("");
-            fila += `<td>${lineas}</td>`;
-          }
+      grupos.forEach(g => {
+        const delGrupo = datos.filter(u => u[g.campo] === g.id)
+          .sort((a, b) => (a.nombre || "").localeCompare(b.nombre || "") || (a.marca || "").localeCompare(b.marca || ""));
+        if (delGrupo.length === 0) return;
+
+        const titulo = document.createElement("div");
+        titulo.className = "grupo-titulo";
+        titulo.innerText = g.nombre + "  (" + delGrupo.length + ")";
+        contenedor.appendChild(titulo);
+
+        const div = document.createElement("div");
+        div.className = "tarjeta tabla-scroll";
+        div.style.marginTop = "0";
+
+        const segundaCol = agruparPor === "categoria" ? "Base" : "Categoría";
+
+        let html = `<table><thead><tr>
+          <th>Nombre</th><th>Marca</th><th>P/N</th><th>S/N</th>
+          <th>Fecha rev.</th><th>Caducidad</th><th>${segundaCol}</th>
+          <th>Estado</th><th>Observaciones</th>
+        </tr></thead><tbody>`;
+
+        delGrupo.forEach(u => {
+          const caducado = estaCaducado(u);
+          const otraCol = agruparPor === "categoria" ? (mapaBases[u.base_id] || "") : (mapaCategorias[u.categoria_id] || "");
+          html += `<tr>
+            <td class="col-material">${u.nombre || ""}</td>
+            <td class="col-marca">${u.marca || ""}</td>
+            <td style="text-align:center;">${u.modelo || ""}</td>
+            <td style="text-align:center;">${u.numero_serie || ""}</td>
+            <td style="text-align:center;">${formatearFecha(u.fecha_revision)}</td>
+            <td class="col-caducidad">${formatearFecha(u.fecha_caducidad)}</td>
+            <td style="text-align:center;">${otraCol}</td>
+            <td class="${caducado ? "estado-caducado" : "estado-util"}">${caducado ? "CADUCADO" : "ÚTIL"}</td>
+            <td>${ultimaNota[u.id] || ""}</td>
+          </tr>`;
         });
 
-        tr.innerHTML = fila;
-        tbody.appendChild(tr);
+        html += "</tbody></table>";
+        div.innerHTML = html;
+        contenedor.appendChild(div);
       });
-      tabla.appendChild(tbody);
+    }
+
+    function filasParaExportar() {
+      const agruparPor = document.getElementById("agruparPor").value;
+      const mapaCategorias = Object.fromEntries(categorias.map(c => [c.id, c.nombre]));
+      const mapaBases = Object.fromEntries(bases.map(b => [b.id, b.nombre]));
+      const datos = filasFiltradas();
+
+      const grupos = agruparPor === "categoria"
+        ? categorias.map(c => ({ id: c.id, nombre: c.nombre, campo: "categoria_id" }))
+        : bases.map(b => ({ id: b.id, nombre: b.nombre, campo: "base_id" }));
+
+      const bloques = [];
+      grupos.forEach(g => {
+        const delGrupo = datos.filter(u => u[g.campo] === g.id)
+          .sort((a, b) => (a.nombre || "").localeCompare(b.nombre || "") || (a.marca || "").localeCompare(b.marca || ""));
+        if (delGrupo.length === 0) return;
+
+        const filas = delGrupo.map(u => ({
+          nombre: u.nombre || "",
+          marca: u.marca || "",
+          pn: u.modelo || "",
+          sn: u.numero_serie || "",
+          rev: formatearFecha(u.fecha_revision),
+          cad: formatearFecha(u.fecha_caducidad),
+          otra: agruparPor === "categoria" ? (mapaBases[u.base_id] || "") : (mapaCategorias[u.categoria_id] || ""),
+          caducado: estaCaducado(u),
+          obs: ultimaNota[u.id] || ""
+        }));
+
+        bloques.push({ titulo: g.nombre, filas, segundaCol: agruparPor === "categoria" ? "Base" : "Categoría" });
+      });
+
+      return bloques;
     }
 
     function generarPDF() {
-      const TAMANO_BLOQUE = 10;
-      const bloques = [];
-      for (let i = 0; i < bases.length; i += TAMANO_BLOQUE) {
-        bloques.push(bases.slice(i, i + TAMANO_BLOQUE));
-      }
+      const bloques = filasParaExportar();
+      const contenido = [{ text: "Resumen de material de supervivencia", fontSize: 13, bold: true, margin: [0, 0, 0, 10] }];
 
-      const contenido = [
-        { text: "Resumen de material de supervivencia", fontSize: 14, bold: true, margin: [0, 0, 0, 10] }
-      ];
+      bloques.forEach((b, i) => {
+        contenido.push({ text: b.titulo, fontSize: 11, bold: true, margin: [0, 8, 0, 4] });
 
-      bloques.forEach((bloque, indiceBloque) => {
-        const anchoCols = ["auto"].concat(bloque.map(() => "*"));
+        const cuerpo = [[
+          "Nombre", "Marca", "P/N", "S/N", "Fecha rev.", "Caducidad", b.segundaCol, "Estado", "Observaciones"
+        ].map(t => ({ text: t, bold: true, fillColor: "#1F5FA9", color: "white" }))];
 
-        const filaCabecera = [{ text: "Categoría", bold: true, fillColor: "#0B2E4F", color: "white" }]
-          .concat(bloque.map(b => ({ text: b.nombre, bold: true, fillColor: "#0B2E4F", color: "white" })));
-
-        const cuerpo = [filaCabecera];
-
-        categorias.forEach(cat => {
-          const fila = [{ text: cat.nombre, bold: true }];
-
-          bloque.forEach(b => {
-            const unidades = mapaUnidades[cat.id + "|" + b.id] || [];
-            if (unidades.length === 0) {
-              fila.push({ text: "" });
-              return;
-            }
-
-            const spans = [];
-            unidades.forEach((u, i) => {
-              const estado = estadoUnidad(u);
-              const color = estado === "rojo" ? "#C0392B" : (estado === "amarillo" ? "#B8860B" : undefined);
-              spans.push({
-                text: textoUnidad(u) + (i < unidades.length - 1 ? "\n" : ""),
-                color: color,
-                bold: estado !== ""
-              });
-            });
-            fila.push({ text: spans });
-          });
-
-          cuerpo.push(fila);
+        b.filas.forEach(f => {
+          cuerpo.push([
+            { text: f.nombre },
+            { text: f.marca },
+            { text: f.pn },
+            { text: f.sn },
+            { text: f.rev },
+            { text: f.cad, color: "#E36C0A", bold: true },
+            { text: f.otra },
+            { text: f.caducado ? "CADUCADO" : "ÚTIL", fillColor: f.caducado ? "#FF0000" : undefined, color: f.caducado ? "white" : "#008000", bold: true },
+            { text: f.obs }
+          ]);
         });
 
         contenido.push({
-          table: { headerRows: 1, widths: anchoCols, body: cuerpo },
-          pageBreak: indiceBloque < bloques.length - 1 ? "after" : undefined
+          table: { headerRows: 1, widths: ["auto", "auto", "auto", "auto", "auto", "auto", "auto", "auto", "*"], body: cuerpo },
+          pageBreak: i < bloques.length - 1 ? "after" : undefined
         });
       });
 
-      const docDefinition = {
+      pdfMake.createPdf({
         pageOrientation: "landscape",
         pageMargins: [20, 20, 20, 20],
         content: contenido,
-        defaultStyle: { fontSize: 8 }
-      };
-
-      pdfMake.createPdf(docDefinition).download("Resumen_material_supervivencia.pdf");
+        defaultStyle: { fontSize: 7 }
+      }).download("Resumen_material.pdf");
     }
 
     async function generarExcel() {
+      const bloques = filasParaExportar();
       const workbook = new ExcelJS.Workbook();
-      const hoja = workbook.addWorksheet("Resumen material");
 
-      const columnas = [{ header: "Categoría", key: "categoria", width: 25 }]
-        .concat(bases.map(b => ({ header: b.nombre, key: b.id, width: 28 })));
-      hoja.columns = columnas;
+      bloques.forEach(b => {
+        const nombreHoja = b.titulo.substring(0, 28).replace(/[\\\/\*\?\:\[\]]/g, "");
+        const hoja = workbook.addWorksheet(nombreHoja);
 
-      const filaCabecera = hoja.getRow(1);
-      filaCabecera.eachCell(celda => {
-        celda.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF0B2E4F" } };
-        celda.font = { color: { argb: "FFFFFFFF" }, bold: true };
-      });
+        hoja.columns = [
+          { header: "Nombre", key: "nombre", width: 16 },
+          { header: "Marca", key: "marca", width: 14 },
+          { header: "P/N", key: "pn", width: 18 },
+          { header: "S/N", key: "sn", width: 14 },
+          { header: "Fecha rev.", key: "rev", width: 12 },
+          { header: "Caducidad", key: "cad", width: 12 },
+          { header: b.segundaCol, key: "otra", width: 16 },
+          { header: "Estado", key: "estado", width: 12 },
+          { header: "Observaciones", key: "obs", width: 50 }
+        ];
 
-      categorias.forEach(cat => {
-        const fila = { categoria: cat.nombre };
-
-        bases.forEach(b => {
-          const unidades = mapaUnidades[cat.id + "|" + b.id] || [];
-          if (unidades.length === 0) {
-            fila[b.id] = "";
-            return;
-          }
-
-          const runs = unidades.map((u, i) => {
-            const estado = estadoUnidad(u);
-            const color = estado === "rojo" ? "FFC0392B" : (estado === "amarillo" ? "FFB8860B" : "FF000000");
-            return {
-              text: textoUnidad(u) + (i < unidades.length - 1 ? "\n" : ""),
-              font: { color: { argb: color }, bold: estado !== "" }
-            };
-          });
-
-          fila[b.id] = { richText: runs };
+        hoja.getRow(1).eachCell(c => {
+          c.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF1F5FA9" } };
+          c.font = { color: { argb: "FFFFFFFF" }, bold: true };
+          c.alignment = { horizontal: "center" };
         });
 
-        hoja.addRow(fila);
-      });
+        b.filas.forEach(f => {
+          const fila = hoja.addRow({
+            nombre: f.nombre, marca: f.marca, pn: f.pn, sn: f.sn,
+            rev: f.rev, cad: f.cad, otra: f.otra,
+            estado: f.caducado ? "CADUCADO" : "ÚTIL",
+            obs: f.obs
+          });
 
-      hoja.eachRow(fila => {
-        fila.alignment = { wrapText: true, vertical: "top" };
+          fila.getCell("nombre").fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF1F5FA9" } };
+          fila.getCell("nombre").font = { color: { argb: "FFFFFFFF" }, bold: true };
+          fila.getCell("marca").font = { color: { argb: "FF1F5FA9" }, bold: true };
+          fila.getCell("cad").font = { color: { argb: "FFE36C0A" }, bold: true };
+
+          const celdaEstado = fila.getCell("estado");
+          celdaEstado.alignment = { horizontal: "center" };
+          if (f.caducado) {
+            celdaEstado.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFFF0000" } };
+            celdaEstado.font = { color: { argb: "FFFFFFFF" }, bold: true };
+          } else {
+            celdaEstado.font = { color: { argb: "FF008000" }, bold: true };
+          }
+        });
+
+        hoja.eachRow(r => {
+          r.eachCell(c => {
+            c.border = {
+              top: { style: "thin" }, bottom: { style: "thin" },
+              left: { style: "thin" }, right: { style: "thin" }
+            };
+          });
+        });
       });
 
       const buffer = await workbook.xlsx.writeBuffer();
@@ -225,13 +282,13 @@
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = "Resumen_material_supervivencia.xlsx";
+      a.download = "Resumen_material.xlsx";
       a.click();
     }
 
     async function iniciar() {
-      await obtenerDatos();
-      renderTablaHTML();
+      await cargarDatos();
+      render();
     }
 
     iniciar();
