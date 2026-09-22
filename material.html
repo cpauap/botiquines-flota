@@ -224,7 +224,7 @@
         .from("documentos_base")
         .select("*")
         .eq("base_id", baseSeleccionadaId)
-        .order("creado_en", { ascending: false });
+        .order("nombre", { ascending: true });
 
       const lista = document.getElementById("listaDocumentosBase");
       lista.innerHTML = "";
@@ -235,9 +235,16 @@
           .createSignedUrl(doc.url, 3600);
 
         const li = document.createElement("li");
-        li.innerHTML = `<a href="${firmada.signedUrl}" target="_blank">${doc.nombre}</a>`;
+        li.innerHTML = `<a href="${firmada.signedUrl}" target="_blank">${doc.nombre}</a> <button onclick="eliminarDocumentoBase('${doc.id}', '${doc.url}')">Eliminar</button>`;
         lista.appendChild(li);
       }
+    }
+
+    async function eliminarDocumentoBase(id, ruta) {
+      if (!confirm("¿Eliminar este documento?")) return;
+      await client.storage.from("documentos-bases").remove([ruta]);
+      await client.from("documentos_base").delete().eq("id", id);
+      cargarDocumentosBase();
     }
 
     async function cargarTabla() {
