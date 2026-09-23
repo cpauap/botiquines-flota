@@ -107,7 +107,7 @@
       const { d, m, a } = formatearFechaCorta(fecha);
 
       const { Document, Packer, Table, TableRow, TableCell, Paragraph, TextRun, ImageRun,
-              WidthType, ShadingType, AlignmentType, VerticalAlign, BorderStyle, WidthType: WT } = docx;
+              WidthType, ShadingType, AlignmentType, VerticalAlign, BorderStyle } = docx;
 
       const mapaCategorias = Object.fromEntries(categorias.map(c => [c.id, c.nombre]));
 
@@ -118,32 +118,50 @@
         return new TableCell({
           borders: bordes,
           verticalAlign: VerticalAlign.CENTER,
+          rowSpan: opciones.rowSpan || 1,
+          margins: { top: 120, bottom: 120, left: 150, right: 150 },
           children: [new Paragraph({
             alignment: opciones.centrado ? AlignmentType.CENTER : AlignmentType.LEFT,
-            children: [new TextRun({ text: texto || "", bold: opciones.bold || false })]
+            children: [new TextRun({ text: texto || "", bold: opciones.bold || false, size: 24 })]
           })]
         });
       }
 
-      const filasTabla = [];
+      // Agrupar los seleccionados por categoría
+      const gruposPorCategoria = {};
       seleccionados.forEach(id => {
         const u = unidades.find(x => x.id === id);
-        const nombreCat = (mapaCategorias[u.categoria_id] || "").toUpperCase();
+        if (!gruposPorCategoria[u.categoria_id]) gruposPorCategoria[u.categoria_id] = [];
+        gruposPorCategoria[u.categoria_id].push(u);
+      });
+
+      const filasTabla = [];
+      Object.entries(gruposPorCategoria).forEach(([categoriaId, lista]) => {
+        const nombreCat = (mapaCategorias[categoriaId] || "").toUpperCase();
+        const necesitaS = lista.length > 1 && !nombreCat.endsWith("S");
+        const etiqueta = lista.length + " " + nombreCat + (necesitaS ? "S" : "");
+
         filasTabla.push(new TableRow({ children: [
-          celda("1 " + nombreCat, { bold: true }),
+          celda(etiqueta, { bold: true, rowSpan: lista.length + 1 }),
           celda("MODELO", { bold: true }),
           celda("P/N", { bold: true }),
           celda("S/N", { bold: true })
         ]}));
-        filasTabla.push(new TableRow({ children: [
-          celda(""),
-          celda(u.marca + (u.modelo ? " " + u.modelo : "")),
-          celda(u.modelo || ""),
-          celda(u.numero_serie || "")
-        ]}));
+
+        lista.forEach(u => {
+          filasTabla.push(new TableRow({ children: [
+            celda(u.marca + (u.modelo ? " " + u.modelo : "")),
+            celda(u.modelo || ""),
+            celda(u.numero_serie || "")
+          ]}));
+        });
       });
 
-      const tablaItems = new Table({ width: { size: 9000, type: WidthType.DXA }, rows: filasTabla });
+      const tablaItems = new Table({
+        width: { size: 9500, type: WidthType.DXA },
+        columnWidths: [2800, 2800, 2000, 1900],
+        rows: filasTabla
+      });
 
       const filaLogo = new TableRow({ children: [
         new TableCell({
@@ -176,11 +194,11 @@
 
       const doc = new Document({
         sections: [{
-          properties: { page: { margin: { top: 720, bottom: 720, left: 900, right: 900 } } },
+          properties: { page: { margin: { top: 720, bottom: 720, left: 700, right: 700 } } },
           children: [
-            new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: "RELACIÓN DE MATERIAL DE SUPERVIVENCIA PARA ENVIAR A " + baseDestinoNombre.toUpperCase(), bold: true })] }),
+            new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: "RELACIÓN DE MATERIAL DE SUPERVIVENCIA PARA ENVIAR A " + baseDestinoNombre.toUpperCase(), bold: true, size: 28 })] }),
             new Paragraph({ text: "" }),
-            new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: `(ENTREGADO EN ${baseDestinoNombre.toUpperCase()} EL ${d}/${m}/${a})` })] }),
+            new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: `(ENTREGADO EN ${baseDestinoNombre.toUpperCase()} EL ${d}/${m}/${a})`, size: 24 })] }),
             new Paragraph({ text: "" }),
             tablaItems,
             new Paragraph({ text: "" }),
