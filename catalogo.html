@@ -87,7 +87,10 @@
               <input type="text" value="${p.marca}" onchange="editarProducto('${p.id}', 'marca', this.value)" style="width:150px;">
               <input type="text" value="${p.modelo || ''}" onchange="editarProducto('${p.id}', 'modelo', this.value)" style="width:150px;">
             </span>
-            <button onclick="borrarProducto('${p.id}')">Eliminar</button>`;
+            <span>
+              <button onclick="window.location.href='catalogo-detalle.html?id=${p.id}'">Ficha</button>
+              <button onclick="borrarProducto('${p.id}')">Eliminar</button>
+            </span>`;
           bloque.appendChild(fila);
         });
 
