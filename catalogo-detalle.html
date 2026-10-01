@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>Ficha de producto</title>
+<link rel="stylesheet" href="estilo.css">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+  .nota { border-bottom: 1px solid var(--gris-borde); padding: 8px 0; }
+  .nota textarea { width: 100%; }
+  .nota-meta { font-size: 12px; color: #666; }
+</style>
+</head>
+<body>
+  <div class="barra-superior">
+    <h1 id="titulo">Cargando...</h1>
+    <button onclick="window.location.href='catalogo.html'">← Catálogo</button>
+  </div>
+  <div class="contenedor">
+
+  <div class="tarjeta" id="datosBasicos">Cargando datos...</div>
+
+  <div class="tarjeta">
+    <h3>Observaciones</h3>
+    <div id="listaNotas"></div>
+    <textarea id="notaNueva" rows="2" style="width:100%;" placeholder="Añadir una observación..."></textarea>
+    <button onclick="añadirNota()">Añadir observación</button>
+  </div>
+  </div>
+
+  <script>
+    const SUPABASE_URL = "https://pfyvliaknlpuawuppsko.supabase.co";
+    const SUPABASE_KEY = "sb_publishable_f3F70B-1EnU3aRpQaFu7_A_szShexxl";
+    const client = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+    const params = new URLSearchParams(window.location.search);
+    const productoId = params.get("id");
+    let mapaCategorias = {};
+
+    function formatearFechaHora(iso) {
+      return new Date(iso).toLocaleString("es-ES");
+    }
+
+    async function cargarMapas() {
+      const { data: categorias } = await client.from("categorias_producto").select("id, nombre");
+      categorias.forEach(c => { mapaCategorias[c.id] = c.nombre; });
+    }
+
+    async function cargarDatos() {
+      await cargarMapas();
+
+      const { data: p } = await client.from("catalogo_productos").select("*").eq("id", productoId).single();
+
+      document.getElementById("titulo").innerText = `${p.marca} ${p.modelo || ""}`;
+      document.getElementById("datosBasicos").innerHTML = `
+        <p><b>Categoría:</b> ${mapaCategorias[p.categoria_id] || ""}</p>
+        <p><b>Marca:</b> ${p.marca} &nbsp; <b>Modelo:</b> ${p.modelo || ""}</p>
+      `;
+
+      cargarNotas();
+    }
+
+    async function cargarNotas() {
+      const { data: notas } = await client
+        .from("notas_catalogo")
+        .select("*")
+        .eq("catalogo_producto_id", productoId)
+        .order("creado_en", { ascending: false });
+
+      const contenedor = document.getElementById("listaNotas");
+      contenedor.innerHTML = "";
+
+      notas.forEach(n => {
+        const div = document.createElement("div");
+        div.className = "nota";
+        div.innerHTML = `
+          <textarea id="nota-${n.id}" rows="2" style="width:100%;">${n.texto}</textarea>
+          <div class="nota-meta">
+            Creada: ${formatearFechaHora(n.creado_en)}${n.actualizado_en ? " · Editada: " + formatearFechaHora(n.actualizado_en) : ""}
+          </div>
+          <button onclick="guardarEdicionNota('${n.id}')">Guardar cambios</button>
+        `;
+        contenedor.appendChild(div);
+      });
+    }
+
+    async function añadirNota() {
+      const texto = document.getElementById("notaNueva").value;
+      if (!texto) return;
+
+      const { data: sesion } = await client.auth.getSession();
+
+      await client.from("notas_catalogo").insert({
+        catalogo_producto_id: productoId,
+        texto,
+        creado_por: sesion.session.user.id
+      });
+
+      document.getElementById("notaNueva").value = "";
+      cargarNotas();
+    }
+
+    async function guardarEdicionNota(id) {
+      const texto = document.getElementById("nota-" + id).value;
+      await client.from("notas_catalogo")
+        .update({ texto, actualizado_en: new Date().toISOString() })
+        .eq("id", id);
+      cargarNotas();
+    }
+
+    cargarDatos();
+  </script>
+</body>
+</html>
