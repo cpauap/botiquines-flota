@@ -127,11 +127,30 @@
           .upsert({ categoria_id, marca, modelo }, { onConflict: "categoria_id,marca,modelo" });
       }
 
-      await client.from("almacen").insert({
-        categoria_id, marca, modelo, caduca,
-        fecha_caducidad: caduca ? fecha_caducidad : null,
-        cantidad
-      });
+      let queryExistente = client.from("almacen")
+        .select("id, cantidad")
+        .eq("categoria_id", categoria_id)
+        .eq("marca", marca)
+        .eq("modelo", modelo || "")
+        .eq("caduca", caduca);
+
+      queryExistente = caduca
+        ? queryExistente.eq("fecha_caducidad", fecha_caducidad)
+        : queryExistente.is("fecha_caducidad", null);
+
+      const { data: existente } = await queryExistente.maybeSingle();
+
+      if (existente) {
+        await client.from("almacen")
+          .update({ cantidad: existente.cantidad + parseInt(cantidad) })
+          .eq("id", existente.id);
+      } else {
+        await client.from("almacen").insert({
+          categoria_id, marca, modelo, caduca,
+          fecha_caducidad: caduca ? fecha_caducidad : null,
+          cantidad
+        });
+      }
 
       document.getElementById("caducaNuevo").checked = true;
       toggleCaducaNuevo();
