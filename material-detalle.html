@@ -29,6 +29,14 @@
   </div>
 
   <div class="tarjeta">
+    <h3>Documentos</h3>
+    <ul id="listaDocumentosMaterial"></ul>
+    <input type="text" id="nombreDocumentoMaterial" placeholder="Nombre del documento">
+    <input type="file" id="inputDocumentoMaterial">
+    <button onclick="subirDocumentoMaterial()">Subir documento</button>
+  </div>
+
+  <div class="tarjeta">
     <h3>Observaciones</h3>
     <div id="listaNotas"></div>
     <textarea id="notaNueva" rows="2" style="width:100%;" placeholder="Añadir una observación..."></textarea>
@@ -55,6 +63,12 @@
     function formatearFechaHora(iso) {
       const d = new Date(iso);
       return d.toLocaleString("es-ES");
+    }
+
+    function limpiarNombreArchivo(nombre) {
+      return nombre
+        .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+        .replace(/[^a-zA-Z0-9.\-_]/g, "_");
     }
 
     function volver() {
@@ -85,6 +99,7 @@
       `;
 
       cargarHistorialUbicacion();
+      cargarDocumentosMaterial();
       cargarNotas();
     }
 
@@ -121,6 +136,60 @@
       const base_id = document.getElementById("base-mov-" + id).value;
       await client.from("movimientos_material").update({ fecha, base_id }).eq("id", id);
       cargarHistorialUbicacion();
+    }
+
+    async function subirDocumentoMaterial() {
+      const nombre = document.getElementById("nombreDocumentoMaterial").value;
+      const archivo = document.getElementById("inputDocumentoMaterial").files[0];
+      if (!nombre || !archivo) { alert("Pon un nombre y elige un archivo."); return; }
+
+      const ruta = materialId + "/" + Date.now() + "-" + limpiarNombreArchivo(archivo.name);
+      const { error: errorSubida } = await client.storage
+        .from("documentos-material")
+        .upload(ruta, archivo);
+
+      if (errorSubida) { alert("Error al subir: " + errorSubida.message); return; }
+
+      const { data: sesion } = await client.auth.getSession();
+
+      await client.from("documentos_material").insert({
+        material_id: materialId,
+        nombre: nombre,
+        url: ruta,
+        subido_por: sesion.session.user.id
+      });
+
+      document.getElementById("nombreDocumentoMaterial").value = "";
+      document.getElementById("inputDocumentoMaterial").value = "";
+      cargarDocumentosMaterial();
+    }
+
+    async function cargarDocumentosMaterial() {
+      const { data: docs } = await client
+        .from("documentos_material")
+        .select("*")
+        .eq("material_id", materialId)
+        .order("nombre", { ascending: true });
+
+      const lista = document.getElementById("listaDocumentosMaterial");
+      lista.innerHTML = "";
+
+      for (const doc of docs) {
+        const { data: firmada } = await client.storage
+          .from("documentos-material")
+          .createSignedUrl(doc.url, 3600);
+
+        const li = document.createElement("li");
+        li.innerHTML = `<a href="${firmada.signedUrl}" target="_blank">${doc.nombre}</a> <button onclick="eliminarDocumentoMaterial('${doc.id}', '${doc.url}')">Eliminar</button>`;
+        lista.appendChild(li);
+      }
+    }
+
+    async function eliminarDocumentoMaterial(id, ruta) {
+      if (!confirm("¿Eliminar este documento?")) return;
+      await client.storage.from("documentos-material").remove([ruta]);
+      await client.from("documentos_material").delete().eq("id", id);
+      cargarDocumentosMaterial();
     }
 
     async function cargarNotas() {
