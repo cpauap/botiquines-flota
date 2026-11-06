@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>Destinatarios de avisos</title>
+<link rel="stylesheet" href="estilo.css">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body>
+  <div class="barra-superior">
+    <h1>Avisos por email</h1>
+    <button onclick="window.location.href='inicio.html'">← Inicio</button>
+  </div>
+  <div class="contenedor">
+
+  <div class="tarjeta">
+    <h3>Quién recibe los avisos de caducidad</h3>
+    <p>Los avisos (a 45, 30 y 15 días) de botiquines y de material de supervivencia se envían a esta lista.</p>
+    <p style="font-size:13px;color:#555;">Para que lleguen a cualquier dirección hace falta que el servicio de correo tenga un remitente verificado. Mira el anexo técnico del manual.</p>
+  </div>
+
+  <div class="tarjeta">
+    <h3>Añadir destinatario</h3>
+    <input type="email" id="emailNuevo" placeholder="correo@ejemplo.es" style="width:280px;">
+    <button onclick="añadir()">Añadir</button>
+    <p id="mensaje" style="color:var(--rojo);font-size:14px;"></p>
+  </div>
+
+  <div class="tarjeta">
+    <h3>Lista actual (<span id="contador">0</span>)</h3>
+    <table>
+      <thead><tr><th>Correo</th><th></th></tr></thead>
+      <tbody id="filas"></tbody>
+    </table>
+  </div>
+  </div>
+
+  <script>
+    const SUPABASE_URL = "https://pfyvliaknlpuawuppsko.supabase.co";
+    const SUPABASE_KEY = "sb_publishable_f3F70B-1EnU3aRpQaFu7_A_szShexxl";
+    const client = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+    async function comprobarSesion() {
+      const { data } = await client.auth.getSession();
+      if (!data.session) window.location.href = "index.html";
+    }
+
+    async function cargar() {
+      const { data } = await client.from("destinatarios_alertas").select("id, email").order("email");
+      const filas = document.getElementById("filas");
+      filas.innerHTML = "";
+      (data || []).forEach(d => {
+        const tr = document.createElement("tr");
+        tr.innerHTML = `<td>${d.email}</td><td><button onclick="eliminar('${d.id}', '${d.email}')">Eliminar</button></td>`;
+        filas.appendChild(tr);
+      });
+      document.getElementById("contador").innerText = (data || []).length;
+      if ((data || []).length === 0) {
+        filas.innerHTML = "<tr><td colspan='2'>Lista vacía: nadie recibirá avisos.</td></tr>";
+      }
+    }
+
+    async function añadir() {
+      const email = document.getElementById("emailNuevo").value.trim().toLowerCase();
+      const mensaje = document.getElementById("mensaje");
+      mensaje.innerText = "";
+
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+        mensaje.innerText = "Escribe un correo válido.";
+        return;
+      }
+
+      const { error } = await client.from("destinatarios_alertas").insert({ email });
+      if (error) {
+        mensaje.innerText = error.code === "23505" ? "Ese correo ya está en la lista." : "Error: " + error.message;
+        return;
+      }
+
+      document.getElementById("emailNuevo").value = "";
+      cargar();
+    }
+
+    async function eliminar(id, email) {
+      if (!confirm("¿Quitar " + email + " de la lista de avisos?")) return;
+      await client.from("destinatarios_alertas").delete().eq("id", id);
+      cargar();
+    }
+
+    comprobarSesion();
+    cargar();
+  </script>
+</body>
+</html>
