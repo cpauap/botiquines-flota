@@ -162,7 +162,7 @@
       const imagenMembrete = new Paragraph({
         alignment: AlignmentType.LEFT,
         children: [
-          new ImageRun({ data: base64ToUint8(IMG_MEMBRETE), transformation: { width: 460, height: 114 } })
+          new ImageRun({ type: "png", data: base64ToUint8(IMG_MEMBRETE), transformation: { width: 460, height: 114 } })
         ]
       });
 
